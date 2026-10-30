@@ -3,14 +3,10 @@ from pathlib import Path
 from typing import Iterator
 
 import pytest
-from fastapi.testclient import TestClient
 
 from app.api import downloads
 from app.database import SessionLocal
-from app.main import app
 from app.models import Work, WorkFile
-
-client = TestClient(app)
 
 
 @pytest.fixture
@@ -22,12 +18,13 @@ def upload_directory(
 
 
 def create_work_with_file(
+    user_id: int,
     content: bytes,
     storage_filename: str,
     original_filename: str = "My Original Book.epub",
 ) -> int:
     with SessionLocal() as db:
-        work = Work(title="Download Test Work")
+        work = Work(user_id=user_id, title="Download Test Work")
         work.files.append(
             WorkFile(
                 original_filename=original_filename,
@@ -35,6 +32,8 @@ def create_work_with_file(
                 file_format="EPUB",
                 file_size=len(content),
                 checksum=hashlib.sha256(content).hexdigest(),
+                storage_provider="legacy_server",
+                status="stored",
             )
         )
         db.add(work)
@@ -52,12 +51,14 @@ def delete_work(work_id: int) -> None:
 
 
 def test_download_returns_original_bytes_and_filename(
+    client,
     upload_directory: Path,
 ) -> None:
+    user_id = client.get("/api/auth/me").json()["id"]
     content = b"original EPUB file bytes"
     storage_filename = "download-test-original.epub"
     (upload_directory / storage_filename).write_bytes(content)
-    work_id = create_work_with_file(content, storage_filename)
+    work_id = create_work_with_file(user_id, content, storage_filename)
 
     try:
         response = client.get(f"/api/works/{work_id}/download")
@@ -75,11 +76,16 @@ def test_download_returns_original_bytes_and_filename(
         delete_work(work_id)
 
 
-def test_download_names_pdf_conversion_as_epub(upload_directory: Path) -> None:
+def test_download_names_pdf_conversion_as_epub(
+    client,
+    upload_directory: Path,
+) -> None:
+    user_id = client.get("/api/auth/me").json()["id"]
     content = b"converted EPUB file bytes"
     storage_filename = "download-converted-pdf.epub"
     (upload_directory / storage_filename).write_bytes(content)
     work_id = create_work_with_file(
+        user_id,
         content,
         storage_filename,
         original_filename="My Original Book.pdf",
@@ -97,7 +103,7 @@ def test_download_names_pdf_conversion_as_epub(upload_directory: Path) -> None:
         delete_work(work_id)
 
 
-def test_download_returns_404_for_missing_work() -> None:
+def test_download_returns_404_for_missing_work(client) -> None:
     response = client.get("/api/works/2147483647/download")
 
     assert response.status_code == 404
@@ -105,9 +111,11 @@ def test_download_returns_404_for_missing_work() -> None:
 
 
 def test_download_returns_404_when_stored_file_is_missing(
+    client,
     upload_directory: Path,
 ) -> None:
-    work_id = create_work_with_file(b"missing file", "missing.epub")
+    user_id = client.get("/api/auth/me").json()["id"]
+    work_id = create_work_with_file(user_id, b"missing file", "missing.epub")
 
     try:
         response = client.get(f"/api/works/{work_id}/download")
@@ -119,11 +127,14 @@ def test_download_returns_404_when_stored_file_is_missing(
 
 
 def test_download_does_not_allow_stored_path_to_escape_storage(
+    client,
     upload_directory: Path, tmp_path: Path
 ) -> None:
+    user_id = client.get("/api/auth/me").json()["id"]
     outside_file = tmp_path.parent / "outside-download-test.epub"
     outside_file.write_bytes(b"must not be downloadable")
     work_id = create_work_with_file(
+        user_id,
         outside_file.read_bytes(),
         f"../{outside_file.name}",
         original_filename="outside.epub",

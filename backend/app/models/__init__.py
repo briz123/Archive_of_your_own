@@ -1,3 +1,4 @@
+from app.models.auth import User, UserSession
 from app.models.taxonomy import (
     ArchiveWarning,
     ArchiveWarningType,
@@ -17,6 +18,8 @@ __all__ = [
     "Tag",
     "TagAlias",
     "TagType",
+    "User",
+    "UserSession",
     "Work",
     "WorkCategory",
     "WorkFile",

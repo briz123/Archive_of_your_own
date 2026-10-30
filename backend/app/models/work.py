@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, Enum as SqlEnum, Integer, String, Text, func
+from sqlalchemy import DateTime, Enum as SqlEnum, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -12,10 +12,21 @@ class Work(Base):
     __tablename__ = "works"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     original_author: Mapped[Optional[str]] = mapped_column(String(500))
     description: Mapped[Optional[str]] = mapped_column(Text)
     language: Mapped[Optional[str]] = mapped_column(String(50))
+    publisher: Mapped[Optional[str]] = mapped_column(String(500))
+    identifier: Mapped[Optional[str]] = mapped_column(String(1000))
+    subject: Mapped[Optional[str]] = mapped_column(Text)
+    creator: Mapped[Optional[str]] = mapped_column(String(500))
+    producer: Mapped[Optional[str]] = mapped_column(String(500))
+    publication_date: Mapped[Optional[str]] = mapped_column(String(100))
+    creation_date: Mapped[Optional[str]] = mapped_column(String(100))
+    modification_date: Mapped[Optional[str]] = mapped_column(String(100))
     word_count: Mapped[Optional[int]] = mapped_column(Integer)
     chapter_count: Mapped[Optional[int]] = mapped_column(Integer)
     rating: Mapped[Optional[Rating]] = mapped_column(
@@ -45,6 +56,7 @@ class Work(Base):
     files: Mapped[list["WorkFile"]] = relationship(
         back_populates="work", cascade="all, delete-orphan"
     )
+    owner: Mapped["User"] = relationship(back_populates="works")
     tags: Mapped[list["Tag"]] = relationship(
         secondary=work_tags, back_populates="works"
     )

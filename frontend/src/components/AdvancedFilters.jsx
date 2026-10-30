@@ -1,9 +1,7 @@
 const TAG_CATEGORIES = {
-  relationship_id: "Relationship",
-  character_id: "Character",
-  additional_tag_id: "Additional",
-  include_warning_id: "Archive Warning",
-  exclude_warning_id: "Archive Warning",
+  relationship_id: "relationship",
+  character_id: "character",
+  additional_tag_id: "additional",
 };
 
 const EMPTY_FILTERS = {
@@ -18,12 +16,12 @@ const EMPTY_FILTERS = {
   exclude_tag_id: [],
   completion_status: [],
   language: [],
-  sort: "recent",
+  sort: "recently_added",
 };
 
 const SORT_OPTIONS = [
-  ["recent", "Recently uploaded"],
-  ["oldest", "Oldest uploaded"],
+  ["recently_added", "Recently added"],
+  ["recently_updated", "Recently updated"],
   ["title", "Alphabetical title"],
   ["word_count_desc", "Highest word count"],
   ["word_count_asc", "Lowest word count"],
@@ -73,7 +71,7 @@ function optionsFromNames(names) {
 
 function tagOptions(tags, category) {
   return tags
-    .filter((tag) => !category || tag.category === category)
+    .filter((tag) => !category || tag.tag_type === category)
     .map((tag) => ({ value: tag.id, label: tag.name }));
 }
 
@@ -138,14 +136,14 @@ function AdvancedFilters({ filters, options, onChange, onClear, loading }) {
             <CheckboxGroup
               label="Include archive warnings"
               name="include_warning_id"
-              options={groupedTagOptions("include_warning_id")}
+              options={optionsFromNames(options.warnings)}
               selected={filters.include_warning_id}
               onChange={onChange}
             />
             <CheckboxGroup
               label="Exclude archive warnings"
               name="exclude_warning_id"
-              options={groupedTagOptions("exclude_warning_id")}
+              options={optionsFromNames(options.warnings)}
               selected={filters.exclude_warning_id}
               onChange={onChange}
             />

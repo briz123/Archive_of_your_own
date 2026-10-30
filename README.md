@@ -43,14 +43,10 @@ replacement for a user's own backups.
 
 ## Current prototype status
 
-The product vision above is the target, not a description of all working
-features. The current prototype does **not** yet have accounts, private
-libraries, local-only importing, file relinking, collections, favorites, or
-duplicate detection. Its existing importer sends the selected file to the
-backend, where the file is stored; the current works list is not private to a
-user. Do not import files into this prototype unless you are comfortable with
-that behavior. These prototype limitations must be resolved before presenting
-it as the local-first product.
+Accounts, private work/tag ownership, and browser-side metadata import are
+implemented. File relinking, collections, favorites, and duplicate detection
+are not. Saving an import stores metadata and a SHA-256 fingerprint only; the
+selected file is not sent to the backend.
 
 ## Copyright & Content Disclaimer
 
@@ -104,10 +100,12 @@ Where available, imported work metadata should retain:
 # Project status
 
 AYO is under development. The current prototype uses React, Python/FastAPI,
-PostgreSQL, SQLAlchemy, and Alembic, but its file-upload and shared-catalog
-behavior does not yet meet the local-first product vision. Accounts, private
-libraries, browser-side file processing, and metadata-only persistence remain
-to be implemented.
+PostgreSQL, SQLAlchemy, and Alembic. Email/password accounts and owner-scoped
+library APIs are implemented. EPUB and PDF metadata extraction now runs in the
+browser and does not upload the selected file. Saving an import creates a
+private work record and local-file metadata record. Legacy backend upload
+routes still exist for older server-stored files but are not used by the
+current frontend import form.
 
 The prototype is experimental and should not be relied upon as the sole catalog
 or backup of any work.
@@ -157,41 +155,75 @@ reads `DATABASE_URL` from `backend/.env`; that file is ignored by Git. Edit the
 URL if your local PostgreSQL username or database differs. Vite forwards its
 `/api` requests to FastAPI for local frontend/backend communication.
 
+## Browser metadata extraction
+
+The reusable extractor is in `frontend/src/services/metadata/`. It returns
+the same nullable metadata shape for EPUB and PDF files. EPUB parsing uses
+`fflate` to read only the package metadata and optional cover image from the
+archive; PDF properties are read using Mozilla PDF.js. Both operate on the
+selected file bytes in the browser. The import form previews the fields and
+tags, then posts only metadata and a locally computed SHA-256 fingerprint.
+
+Supported EPUB fields include title, author, description, language, publisher,
+publication date, identifier, cover, subject-derived fandom/character/
+relationship/additional tags, rating, category, and archive warnings. PDF
+fields include title, author, subject, creator, producer, creation date, and
+modification date. Missing values are returned as `null`; metadata extraction
+does not assume every file is complete. Input is limited to 100 MiB, EPUB
+metadata entries to 2 MiB, cover art to 5 MiB, and archives to 10,000 entries.
+
+Run the frontend metadata tests and production build from `frontend/`:
+
+```bash
+npm test
+npm run build
+```
+
 ## Database models and migrations
 
-SQLAlchemy defines `Work` and `WorkFile`; each work can have multiple files.
-Works also have optional word count, chapter count, rating, completion status,
-and publication date. Fandoms are shared by works, and shared tags have one of
-six categories: Relationship, Character, Additional, Archive Warning, Rating,
-or Category. Alembic creates and updates the database schema from versioned
-migration files.
+SQLAlchemy defines users, server-side user sessions, owner-scoped works and
+tags, work files, warnings, and taxonomy relationships. Existing works and tags
+are assigned to an inactive legacy account by the account migration. Alembic
+creates and updates the database schema from versioned migration files.
 From `Archive_of_your_own/backend`, with the virtual environment activated:
 
 ```bash
 alembic upgrade head
 ```
 
-The following API and run instructions describe the current prototype, not the
-intended local-only import flow. In this prototype, selected book files are
-transferred to and stored by the backend.
+The following upload/download API instructions describe legacy prototype
+routes. The current frontend metadata extractor does not call these endpoints.
 
-The backend exposes `GET /api/works` and `GET /api/works/{id}` to retrieve
-stored work metadata, `PUT /api/works/{id}` to edit metadata without changing
-the stored file, `POST /api/works/upload` to add an EPUB or PDF, and `GET
-/api/works/{id}/download` to download its EPUB file without an account. PDF
-uploads are converted to EPUB during upload; scanned PDFs without extractable
-text are not supported. The
-works list accepts an optional `search` query to match titles and authors
-without regard to capitalization, for example `GET /api/works?search=hermione`.
+Create an account or sign in through the frontend. The backend sets an
+HttpOnly, SameSite=Lax session cookie and a separate CSRF cookie; the session
+token is stored only as a hash in PostgreSQL. Set `SESSION_COOKIE_SECURE=true`
+when serving the app over HTTPS. Configure `TRUSTED_FRONTEND_ORIGINS` for the
+frontend origins that are allowed to register or sign in. Registration requires
+a valid email, matching passwords of at least 12 characters, and stores an
+Argon2 password hash. `POST /api/auth/logout` invalidates the current session.
+
+Library and legacy file routes require a valid session and scope work access to
+its owner. `GET /api/health` remains public. The backend exposes `GET /api/works`,
+`POST /api/works` to save imported metadata without file contents, and
+`GET /api/works/{id}` to retrieve stored work metadata,
+`PUT /api/works/{id}` to edit metadata without changing the stored file,
+`POST /api/works/upload` to add an EPUB or PDF, and
+`GET /api/works/{id}/download` to download its EPUB file. PDF uploads are
+converted to EPUB during upload; scanned PDFs without extractable text are not
+supported. The
+works list accepts an optional `search` query to match titles, authors,
+descriptions, tags, and tag aliases without regard to capitalization, for
+example `GET /api/works?search=hermione`.
 `GET /api/works/filters` returns the available database-backed filter choices.
-The works list also accepts repeated `fandom_id`, `rating`, `relationship_id`,
-`character_id`, `additional_tag_id`, `include_warning_id`,
-`exclude_warning_id`, `include_tag_id`, `exclude_tag_id`, `completion_status`,
-and `language` parameters, plus a `sort` value. Multiple fandoms and included
-tags match any selected value; excluded tags/warnings remove matching works.
-Different filter groups combine together. Sort values are `recent`, `oldest`,
-`title`, `word_count_desc`, and `word_count_asc`. Filtering and sorting run in
-PostgreSQL.
+The library provides filters for fandom, rating, relationship, character,
+additional tags, included/excluded archive warnings, included/excluded tags,
+completion, and language. The API accepts repeated `fandom_id`, `relationship_id`, `character_id`,
+`additional_tag_id`, `include_tag_id`, `tag_id`, `exclude_tag_id`, `warning`,
+`exclude_warning`, `rating`, `category`, `tag_type`, `completion_status`, and
+`language` parameters. Selections across filter groups combine together;
+multiple values within a group match any selected value. Sort values are `recently_added`,
+`recently_updated`, `oldest_added`, `title`, `word_count_desc`, and
+`word_count_asc`. Filtering and sorting run in PostgreSQL.
 
 The update endpoint accepts optional scalar metadata fields and optional
 `fandoms` and `tags` lists. Supplying a list replaces that work's associations;
@@ -239,19 +271,24 @@ npm run dev
 
 Open the frontend URL printed by Vite (normally `http://localhost:5173`). The
 homepage lists works saved in PostgreSQL. Use the search field to find a work
-by title or author, then clear the search to return to the full archive. Click
-“Download EPUB” on a work card to download its EPUB file.
+by title or author, then clear the search to return to your library. Import an
+EPUB or PDF from the sidebar; AYO saves its metadata and fingerprint while the
+original stays on your computer. New local-file records cannot be downloaded
+from AYO because the application does not retain those files. The legacy
+`POST /api/works/upload` endpoint still stores files on the server and is not
+part of the local-first import flow.
 
-With the backend running, the current prototype accepts an EPUB or text-based
-PDF upload from the repository root using:
+## GitHub Pages
 
-```bash
-curl -F "file=@/path/to/book.pdf" http://localhost:8000/api/works/upload
-```
+The frontend is deployed to `https://briz123.github.io/Archive_of_your_own/`
+by the `Deploy frontend to GitHub Pages` workflow whenever changes reach
+`main`. In the repository's **Settings → Pages**, set the build and deployment
+source to **GitHub Actions**. The workflow builds the Vite app with the
+repository subpath configured for project Pages.
 
-The response contains the extracted work metadata and EPUB file record. PDF
-uploads are converted and saved as EPUB under `backend/uploads`; EPUB uploads
-are saved unchanged. The uploaded filename is recorded in PostgreSQL.
+GitHub Pages hosts only static files. Login, saving works, and library search
+also require the FastAPI/PostgreSQL backend to be deployed and configured;
+they are not provided by GitHub Pages itself.
 
 ## Test
 
@@ -263,8 +300,9 @@ pytest
 
 The tests insert and retrieve temporary database records and exercise EPUB
 metadata extraction, PDF-to-EPUB conversion, invalid-upload rejection, and
-cleanup after database failure. Ensure PostgreSQL is running and the
-migration has been applied before running tests.
+cleanup after database failure. Authentication tests cover registration,
+login, logout, CSRF validation, and cross-account access. Ensure PostgreSQL is
+running and the migration has been applied before running tests.
 
 From `Archive_of_your_own/frontend`, verify the production bundle builds:
 
