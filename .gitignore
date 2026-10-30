@@ -214,6 +214,7 @@ tempCodeRunnerFile.py
 # Node.js
 node_modules/
 frontend/dist/
+backend/uploads/
 
 # Marimo
 marimo/_static/
