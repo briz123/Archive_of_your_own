@@ -34,10 +34,15 @@ function formatDescription(description) {
 function WorkCard({ work }) {
   return (
     <article className="work-card">
-      <h2>{work.title}</h2>
-      {work.original_author && (
-        <p className="work-author">By {work.original_author}</p>
-      )}
+      <div className="work-card-heading">
+        <div>
+          <h3>{work.title}</h3>
+          {work.original_author && (
+            <p className="work-author">by {work.original_author}</p>
+          )}
+        </div>
+        <span className="work-format-mark" aria-hidden="true">EPUB</span>
+      </div>
       {work.description && (
         <p className="work-description">{formatDescription(work.description)}</p>
       )}
@@ -57,23 +62,28 @@ function WorkCard({ work }) {
                 additional: "Additional tags",
               }[tagType];
               return (
-                <p key={tagType}>
-                  <strong>{label}:</strong>{" "}
-                  {tags.map((tag) => tag.name).join(", ")}
-                </p>
+                <div className="work-tag-row" key={tagType}>
+                  <strong>{label}</strong>
+                  <div className="tag-list">
+                    {tags.map((tag) => (
+                      <span className="tag-chip" key={tag.id}>{tag.name}</span>
+                    ))}
+                  </div>
+                </div>
               );
             },
           )}
         </div>
       )}
-      {work.language && <p className="work-language">Language: {work.language}</p>}
+      {work.language && <p className="work-language">{work.language}</p>}
 
       {work.files.length > 0 && (
         <ul className="work-files" aria-label="Available files">
           {work.files.map((file) => (
             <li key={file.id}>
               <span>
-                {file.file_format} · {formatFileSize(file.file_size)}
+                <strong>{file.file_format}</strong>
+                <span className="file-size">{formatFileSize(file.file_size)}</span>
               </span>
               <a
                 className="download-link"
