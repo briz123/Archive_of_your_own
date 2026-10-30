@@ -1,38 +1,56 @@
 ## Archive of Your Own (AYO)
 
-AYO is an independent, searchable archive for downloadable fanfiction. It is designed to provide an additional way to preserve and access fanfiction files during temporary outages or periods when original hosting platforms are unavailable.
+AYO is a personal fanfiction library for cataloging, organizing, searching, and
+managing EPUB and PDF files that readers already have on their own devices.
 
-The project is inspired by the importance of preserving fanfiction and ensuring readers can maintain access to works they value. AYO is intended as a supplementary archive, not a replacement for AO3 or any other original publishing platform.
+**Your library lives in AYO. Your books live on your computer.**
 
-## Purpose & Intended Use
+AYO's product direction is local-first: import a file to extract and manage its
+metadata, while the original book stays on the user's computer. AYO is a personal
+organizer, not a public archive or file-sharing service.
 
-AYO is designed specifically for downloading fanfiction files and storing them locally on your own device.
+## Product vision
 
-Its intended uses include:
+AYO aims to provide:
 
-- Providing access to downloadable fanfiction during temporary website outages.
+- Personal user accounts and private libraries.
+- EPUB and PDF importing with metadata extraction, preferably in the browser.
+- A metadata review step before saving a work to the library.
+- Editable work information and organization by fandom and tags.
+- Personal search and filtering.
+- Custom collections, favorites, and duplicate detection.
+- File relinking after files are moved or replaced.
+- Export of library metadata.
 
-- Allowing readers to maintain local copies of works they are authorized to download and keep.
+During import, AYO should temporarily read the selected file, extract available
+metadata, calculate a fingerprint for duplicate detection, and let the user
+review and edit the result. Only the work's metadata should be saved to
+PostgreSQL. The original book should remain on the user's computer and should
+not be permanently uploaded to AYO's server.
 
-- Preserving access to fanfiction independently of a particular hosting platform.
+## What AYO is not
 
-- Providing a searchable catalog of archived works and their associated metadata.
+AYO is not intended to provide:
 
-## What AYO Is Not
+- Permanent EPUB or PDF hosting.
+- Public fanfiction uploads, sharing, or a public catalog of users' works.
+- In-browser reading or file editing.
+- Chapter updates or automatic synchronization with publishing platforms.
+- Google Drive, Dropbox, or OneDrive integration in the initial release.
 
-AYO is not an online reading platform or a replacement for the communities where fanfiction is originally published.
+Users are responsible for keeping their original files safe. AYO is not a
+replacement for a user's own backups.
 
-- No in-browser reading: Works are provided as downloadable files intended to be opened and read on your own device.
+## Current prototype status
 
-- No editing or updating: AYO does not allow users to edit stories, update chapters, or continue works.
-
-- No automatic synchronization: Changes made to a work on its original publishing platform will not automatically appear in AYO.
-
-- No guarantee of the latest version: An archived file represents the version uploaded at that particular time. Visit the original publication for the latest version.
-
-- No community replacement: Comments, bookmarks, author interactions, and other community features remain on the original publishing platforms.
-
-Readers are encouraged to visit and support authors through their original publication pages.
+The product vision above is the target, not a description of all working
+features. The current prototype does **not** yet have accounts, private
+libraries, local-only importing, file relinking, collections, favorites, or
+duplicate detection. Its existing importer sends the selected file to the
+backend, where the file is stored; the current works list is not private to a
+user. Do not import files into this prototype unless you are comfortable with
+that behavior. These prototype limitations must be resolved before presenting
+it as the local-first product.
 
 ## Copyright & Content Disclaimer
 
@@ -40,31 +58,32 @@ AYO is an independent project. It is not affiliated with, endorsed by, sponsored
 
 Copyright remains with the respective authors and rights holders.
 
-Uploading a work to AYO does not transfer copyright ownership to AYO or to another user.
-
-Users are responsible for ensuring they have the necessary rights, permissions, or other valid legal basis to upload and distribute any work they submit.
+Importing a work's metadata into a personal library does not transfer copyright
+ownership to AYO or to another user. Users are responsible for respecting
+authors' rights and applicable law. AYO is for organizing a user's own files,
+not redistributing them.
 
 In particular:
 
-- Downloading or possessing a copy of a work does not automatically grant permission to redistribute it.
-
-- Users must not upload works they are not authorized to share.
+- Possessing a copy of a work does not automatically grant permission to
+  redistribute it.
 
 - Authors and other rights holders retain their applicable rights.
 
-- AYO does not claim ownership of uploaded fanfiction, original characters, settings, or other third-party intellectual property.
-
-- The presence of a work in AYO does not imply endorsement or authorization by its original author or rights holder.
+- AYO does not claim ownership of fanfiction, original characters, settings, or
+  other third-party intellectual property cataloged in a personal library.
 
 Fanfiction may incorporate copyrighted source material. Whether a particular use is legally permitted depends on the circumstances and applicable law. Noncommercial or archival intentions do not automatically establish fair use or other legal permission.
 
-AYO reserves the right to remove content in response to valid copyright complaints or other applicable legal requirements.
+AYO will respond to applicable legal requirements. The intended product does
+not publicly host or distribute the original files.
 
 ## Author Attribution & Respect for Creators
 
-AYO aims to preserve the attribution and original context of fanfiction.
+AYO aims to preserve the attribution and original context of fanfiction in its
+metadata.
 
-Where available, archived works should retain:
+Where available, imported work metadata should retain:
 
 - Original author or pseudonym.
 
@@ -82,40 +101,23 @@ Where available, archived works should retain:
 
 - Authors and rights holders may report content they believe infringes their rights or request its removal.
 
-# Project Status
+# Project status
 
-AYO is currently under development.
+AYO is under development. The current prototype uses React, Python/FastAPI,
+PostgreSQL, SQLAlchemy, and Alembic, but its file-upload and shared-catalog
+behavior does not yet meet the local-first product vision. Accounts, private
+libraries, browser-side file processing, and metadata-only persistence remain
+to be implemented.
 
-## The project currently uses:
-
-Frontend: React
-
-Backend: Python and FastAPI
-
-Database: PostgreSQL
-
-ORM: SQLAlchemy
-
-Database migrations: Alembic
-
-Current functionality includes EPUB uploads and PDF uploads converted to EPUB.
-Metadata is extracted automatically where available.
-
-Searchable works and fandoms.
-
-AO3-inspired tagging and filtering.
-
-Direct downloads to local devices.
-
-Authentication, public uploads, and public download functionality are still under development.
-
-AYO is experimental software and should not yet be relied upon as the sole backup of any work.
+The prototype is experimental and should not be relied upon as the sole catalog
+or backup of any work.
 
 ## Disclaimer
 
-AYO is provided on an as-is basis. The project does not guarantee permanent storage, uninterrupted availability, file integrity, or recovery of uploaded content.
-
-Users should maintain their own local backups of files they wish to preserve.
+AYO is provided on an as-is basis. The project does not guarantee permanent
+storage, uninterrupted availability, file integrity, or recovery of library
+metadata or user files. Users should maintain their own local backups of their
+original books and metadata.
 
 This disclaimer is provided for general informational purposes and does not constitute legal advice. Users are responsible for understanding and complying with applicable copyright laws and permissions.
 
@@ -168,6 +170,10 @@ From `Archive_of_your_own/backend`, with the virtual environment activated:
 ```bash
 alembic upgrade head
 ```
+
+The following API and run instructions describe the current prototype, not the
+intended local-only import flow. In this prototype, selected book files are
+transferred to and stored by the backend.
 
 The backend exposes `GET /api/works` and `GET /api/works/{id}` to retrieve
 stored work metadata, `PUT /api/works/{id}` to edit metadata without changing
@@ -236,8 +242,8 @@ homepage lists works saved in PostgreSQL. Use the search field to find a work
 by title or author, then clear the search to return to the full archive. Click
 “Download EPUB” on a work card to download its EPUB file.
 
-With the backend running, upload an EPUB or a text-based PDF from the repository
-root using:
+With the backend running, the current prototype accepts an EPUB or text-based
+PDF upload from the repository root using:
 
 ```bash
 curl -F "file=@/path/to/book.pdf" http://localhost:8000/api/works/upload

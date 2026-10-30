@@ -142,8 +142,8 @@ function App() {
         </a>
         {acceptedDisclaimer && (
           <nav className="site-nav" aria-label="Main navigation">
-            <a href="#library">Explore works</a>
-            <a href="#upload">Add a work</a>
+            <a href="#library">My library</a>
+            <a href="#upload">Import a file</a>
           </nav>
         )}
       </header>
@@ -155,17 +155,17 @@ function App() {
               <p className="eyebrow">A personal library for stories you love</p>
               <h1 id="welcome-heading">Keep your favorite stories close.</h1>
               <p>
-                A searchable archive for downloadable fanfiction, made for
-                keeping a personal copy on your own device.
+                A personal library for organizing your fanfiction collection.
+                Keep your books on your computer and your catalog in AYO.
               </p>
             </section>
             <section className="disclaimer-gate" aria-labelledby="disclaimer-heading">
               <p className="eyebrow">A note before you begin</p>
               <h2 id="disclaimer-heading">Before you enter</h2>
               <p>
-                This independent archive is intended as a temporary way to download
-                fanfiction for your own device, including during outages of the
-                original publishing site.
+                AYO is being built as a private library for cataloging EPUB and
+                PDF files you already have. Your original books should stay on
+                your computer; AYO should save only their metadata.
               </p>
               <ul>
                 <li>
@@ -173,22 +173,25 @@ function App() {
                   AO3 or the Organization for Transformative Works.
                 </li>
                 <li>
-                  You can download files to your device here; you cannot read,
-                  edit, or update works on this site. Visit the original publication
-                  for the latest version and to support its author.
+                  AYO is not a public archive or a replacement for the communities
+                  where stories are published. It will not host or share your books.
                 </li>
                 <li>
                   Copyright remains with the authors and other rights holders.
-                  Uploaders are responsible for having permission or another valid
-                  legal basis to share a work. A downloaded copy does not itself
-                  grant redistribution rights.
+                  Respect authors' rights and applicable law. Importing metadata
+                  does not grant permission to redistribute a work.
                 </li>
                 <li>
-                  This project is provided as-is and does not guarantee permanent
-                  storage or availability. This notice is informational and is not
-                  legal advice.
+                  Keep your original files and backups safe. This project is
+                  experimental and does not guarantee recovery of your files.
                 </li>
               </ul>
+              <p className="prototype-notice">
+                Prototype limitation: this version does not yet have private
+                accounts or local-only importing. Selected files are currently
+                sent to and stored on the backend, and the works list is shared.
+                Do not import files unless you are comfortable with this.
+              </p>
               {acceptanceError && (
                 <p className="disclaimer-error" role="alert">
                   {acceptanceError}
@@ -203,10 +206,10 @@ function App() {
           <>
             <section className="welcome-hero" aria-labelledby="welcome-heading">
               <p className="eyebrow">A personal library for stories you love</p>
-              <h1 id="welcome-heading">Find your next favorite.</h1>
+              <h1 id="welcome-heading">Your collection, all in one place.</h1>
               <p>
-                Explore the archive, discover stories by fandom, and keep a
-                downloadable copy close at hand.
+                Catalog your EPUBs and PDFs, organize them by fandom and tags,
+                and keep the original files on your own device.
               </p>
               <a className="hero-link" href="#library">Browse the collection <span aria-hidden="true">↓</span></a>
             </section>
@@ -321,7 +324,7 @@ function App() {
                         Try changing your search or filters.
                       </p>
                     ) : (
-                      <p className="empty-state">No works have been uploaded yet. Check back soon.</p>
+                      <p className="empty-state">Your library is empty. Import a file to start cataloging your collection.</p>
                     ))}
                   {status === "success" && works.length > 0 && (
                     <div className="work-list">
@@ -336,15 +339,15 @@ function App() {
                 <UploadForm onUploaded={handleUploaded} />
                 <div className="sidebar-note">
                   <span className="note-icon" aria-hidden="true">✦</span>
-                  <h3>Made for your library</h3>
-                  <p>Upload a PDF or EPUB and download an EPUB copy for your library.</p>
+                  <h3>Your library, organized</h3>
+                  <p>Catalog your EPUB and PDF collection by adding work metadata to your library.</p>
                 </div>
               </aside>
             </div>
           </>
         )}
         <footer className="site-footer">
-          <span>Independent archive · For personal use</span>
+          <span>Personal fanfiction library · Local-first by design</span>
           <a
             href="https://github.com/briz123/Archive_of_your_own"
             target="_blank"

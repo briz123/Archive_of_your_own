@@ -39,10 +39,18 @@ function UploadForm({ onUploaded }) {
 
   return (
     <section className="upload-section" aria-labelledby="upload-heading">
-      <h2 id="upload-heading">Upload a fic</h2>
-      <p>Upload an EPUB or PDF. PDFs are converted to EPUB for download.</p>
+      <h2 id="upload-heading">Import a fic</h2>
+      <p>
+        Choose an EPUB or PDF from your computer. PDFs are converted to EPUB in
+        this prototype.
+      </p>
+      <p className="prototype-notice">
+        Prototype limitation: importing currently sends the selected file to
+        the backend, where it is stored. Local-only, metadata-only import is
+        planned; do not continue unless you are comfortable with server storage.
+      </p>
       <form className="upload-form" onSubmit={handleSubmit}>
-        <label htmlFor="work-upload">EPUB or PDF file</label>
+        <label htmlFor="work-upload">Choose an EPUB or PDF file</label>
         <input
           ref={inputRef}
           id="work-upload"
@@ -60,7 +68,7 @@ function UploadForm({ onUploaded }) {
             ? isPdf
               ? "Uploading and converting..."
               : "Uploading..."
-            : "Upload"}
+            : "Import (prototype upload)"}
         </button>
       </form>
       {error && <p className="upload-error" role="alert">{error}</p>}
