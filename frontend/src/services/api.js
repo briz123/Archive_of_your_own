@@ -46,3 +46,27 @@ export async function fetchFilterOptions() {
   }
   return options;
 }
+
+export async function uploadWork(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch("/api/works/upload", {
+    method: "POST",
+    body: formData,
+  });
+  const result = await response.json();
+
+  if (!response.ok) {
+    const detail =
+      typeof result?.detail === "string"
+        ? result.detail
+        : `Could not upload the EPUB (HTTP ${response.status}).`;
+    throw new Error(detail);
+  }
+  if (!result || typeof result.title !== "string") {
+    throw new Error("The upload response was not in the expected format.");
+  }
+
+  return result;
+}

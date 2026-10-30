@@ -3,9 +3,14 @@ import { useEffect, useState } from "react";
 import { fetchFilterOptions, fetchWorks } from "./services/api.js";
 import AdvancedFilters, { EMPTY_FILTERS } from "./components/AdvancedFilters.jsx";
 import SearchBar from "./components/SearchBar.jsx";
+import UploadForm from "./components/UploadForm.jsx";
 import WorkCard from "./components/WorkCard.jsx";
 
 function App() {
+  const [acceptedDisclaimer, setAcceptedDisclaimer] = useState(
+    () => sessionStorage.getItem("ayo-disclaimer-accepted") === "true",
+  );
+  const [acceptanceError, setAcceptanceError] = useState("");
   const [works, setWorks] = useState([]);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState({ ...EMPTY_FILTERS });
@@ -16,12 +21,17 @@ function App() {
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
   const [retryCount, setRetryCount] = useState(0);
+  const [searchResetKey, setSearchResetKey] = useState(0);
   const advancedSearchEnabled = filterOptions?.advanced_search_enabled === true;
 
   useEffect(() => {
     let active = true;
 
     async function loadFilterOptions() {
+      if (!acceptedDisclaimer) {
+        return;
+      }
+
       setFilterOptionsError("");
       try {
         const result = await fetchFilterOptions();
@@ -41,12 +51,16 @@ function App() {
     return () => {
       active = false;
     };
-  }, [filterOptionsRetry]);
+  }, [filterOptionsRetry, acceptedDisclaimer]);
 
   useEffect(() => {
     let active = true;
 
     async function loadWorks() {
+      if (!acceptedDisclaimer) {
+        return;
+      }
+
       setStatus("loading");
       setError("");
       try {
@@ -70,7 +84,7 @@ function App() {
     return () => {
       active = false;
     };
-  }, [search, filters, retryCount, advancedSearchEnabled]);
+  }, [search, filters, retryCount, advancedSearchEnabled, acceptedDisclaimer]);
 
   function updateFilter(name, value) {
     setFilters((current) => ({ ...current, [name]: value }));
@@ -94,6 +108,25 @@ function App() {
     setFandomQuery("");
   }
 
+  function handleUploaded() {
+    setSearch("");
+    setSearchResetKey((key) => key + 1);
+    clearFilters();
+    setRetryCount((count) => count + 1);
+  }
+
+  function acceptDisclaimer() {
+    try {
+      sessionStorage.setItem("ayo-disclaimer-accepted", "true");
+      setAcceptanceError("");
+      setAcceptedDisclaimer(true);
+    } catch (storageError) {
+      setAcceptanceError(
+        `Your browser could not save this session's acceptance: ${storageError.message}`,
+      );
+    }
+  }
+
   const hasActiveFilters = Object.entries(filters).some(
     ([name, value]) =>
       (Array.isArray(value) && value.length > 0) ||
@@ -103,10 +136,53 @@ function App() {
   return (
     <main>
       <h1>Archive of Your Own</h1>
-      <p>A searchable archive for downloadable fanfiction.</p>
+      {!acceptedDisclaimer ? (
+        <section className="disclaimer-gate" aria-labelledby="disclaimer-heading">
+          <h2 id="disclaimer-heading">Before you enter</h2>
+          <p>
+            This independent archive is intended as a temporary way to download
+            fanfiction for your own device, including during outages of the
+            original publishing site.
+          </p>
+          <ul>
+            <li>
+              This is not AO3 and is not affiliated with or a replacement for
+              AO3 or the Organization for Transformative Works.
+            </li>
+            <li>
+              You can download files to your device here; you cannot read,
+              edit, or update works on this site. Visit the original publication
+              for the latest version and to support its author.
+            </li>
+            <li>
+              Copyright remains with the authors and other rights holders.
+              Uploaders are responsible for having permission or another valid
+              legal basis to share a work. A downloaded copy does not itself
+              grant redistribution rights.
+            </li>
+            <li>
+              This project is provided as-is and does not guarantee permanent
+              storage or availability. This notice is informational and is not
+              legal advice.
+            </li>
+          </ul>
+          {acceptanceError && (
+            <p className="disclaimer-error" role="alert">
+              {acceptanceError}
+            </p>
+          )}
+          <button type="button" onClick={acceptDisclaimer}>
+            I understand and accept — continue to the archive
+          </button>
+        </section>
+      ) : (
+        <>
+          <p>A searchable archive for downloadable fanfiction.</p>
+      <UploadForm onUploaded={handleUploaded} />
       <section className="works-section" aria-live="polite" aria-busy={status === "loading"}>
         <h2>Works</h2>
         <SearchBar
+          key={searchResetKey}
           initialSearch={search}
           onSearch={setSearch}
           disabled={status === "loading"}
@@ -211,6 +287,17 @@ function App() {
           </div>
         )}
       </section>
+        </>
+      )}
+      <footer className="site-footer">
+        <a
+          href="https://github.com/briz123/Archive_of_your_own"
+          target="_blank"
+          rel="noreferrer"
+        >
+          View this project on GitHub
+        </a>
+      </footer>
     </main>
   );
 }
