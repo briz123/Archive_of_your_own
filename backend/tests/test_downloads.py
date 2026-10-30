@@ -75,6 +75,28 @@ def test_download_returns_original_bytes_and_filename(
         delete_work(work_id)
 
 
+def test_download_names_pdf_conversion_as_epub(upload_directory: Path) -> None:
+    content = b"converted EPUB file bytes"
+    storage_filename = "download-converted-pdf.epub"
+    (upload_directory / storage_filename).write_bytes(content)
+    work_id = create_work_with_file(
+        content,
+        storage_filename,
+        original_filename="My Original Book.pdf",
+    )
+
+    try:
+        response = client.get(f"/api/works/{work_id}/download")
+
+        assert response.status_code == 200
+        assert response.content == content
+        assert "filename*=utf-8''My%20Original%20Book.epub" in response.headers[
+            "content-disposition"
+        ]
+    finally:
+        delete_work(work_id)
+
+
 def test_download_returns_404_for_missing_work() -> None:
     response = client.get("/api/works/2147483647/download")
 

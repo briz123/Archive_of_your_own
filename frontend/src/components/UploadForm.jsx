@@ -8,6 +8,7 @@ function UploadForm({ onUploaded }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const inputRef = useRef(null);
+  const isPdf = file?.name.toLowerCase().endsWith(".pdf") ?? false;
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -20,14 +21,17 @@ function UploadForm({ onUploaded }) {
     setSuccess("");
     try {
       const work = await uploadWork(file);
-      setSuccess(`“${work.title}” was uploaded successfully.`);
+      const conversionMessage = isPdf
+        ? " and converted to EPUB"
+        : "";
+      setSuccess(`“${work.title}” was uploaded${conversionMessage} successfully.`);
       setFile(null);
       if (inputRef.current) {
         inputRef.current.value = "";
       }
       onUploaded();
     } catch (uploadError) {
-      setError(uploadError.message || "The EPUB could not be uploaded.");
+      setError(uploadError.message || "The file could not be uploaded.");
     } finally {
       setUploading(false);
     }
@@ -36,14 +40,14 @@ function UploadForm({ onUploaded }) {
   return (
     <section className="upload-section" aria-labelledby="upload-heading">
       <h2 id="upload-heading">Upload a fic</h2>
-      <p>Choose an EPUB file to add a work to the archive.</p>
+      <p>Upload an EPUB or PDF. PDFs are converted to EPUB for download.</p>
       <form className="upload-form" onSubmit={handleSubmit}>
-        <label htmlFor="epub-upload">EPUB file</label>
+        <label htmlFor="work-upload">EPUB or PDF file</label>
         <input
           ref={inputRef}
-          id="epub-upload"
+          id="work-upload"
           type="file"
-          accept=".epub,application/epub+zip"
+          accept=".epub,.pdf,application/epub+zip,application/pdf"
           onChange={(event) => {
             setFile(event.target.files?.[0] || null);
             setError("");
@@ -52,7 +56,11 @@ function UploadForm({ onUploaded }) {
           disabled={uploading}
         />
         <button type="submit" disabled={!file || uploading}>
-          {uploading ? "Uploading..." : "Upload EPUB"}
+          {uploading
+            ? isPdf
+              ? "Uploading and converting..."
+              : "Uploading..."
+            : "Upload"}
         </button>
       </form>
       {error && <p className="upload-error" role="alert">{error}</p>}

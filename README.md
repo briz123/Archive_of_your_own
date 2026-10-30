@@ -98,11 +98,8 @@ ORM: SQLAlchemy
 
 Database migrations: Alembic
 
-Planned functionality includes:
-
-EPUB and PDF uploads.
-
-Automatic metadata extraction.
+Current functionality includes EPUB uploads and PDF uploads converted to EPUB.
+Metadata is extracted automatically where available.
 
 Searchable works and fandoms.
 
@@ -174,8 +171,10 @@ alembic upgrade head
 
 The backend exposes `GET /api/works` and `GET /api/works/{id}` to retrieve
 stored work metadata, `PUT /api/works/{id}` to edit metadata without changing
-the stored file, `POST /api/works/upload` to add an EPUB, and `GET
-/api/works/{id}/download` to download its original file without an account. The
+the stored file, `POST /api/works/upload` to add an EPUB or PDF, and `GET
+/api/works/{id}/download` to download its EPUB file without an account. PDF
+uploads are converted to EPUB during upload; scanned PDFs without extractable
+text are not supported. The
 works list accepts an optional `search` query to match titles and authors
 without regard to capitalization, for example `GET /api/works?search=hermione`.
 `GET /api/works/filters` returns the available database-backed filter choices.
@@ -205,8 +204,9 @@ categories listed above. For example:
 }
 ```
 
-Uploads are streamed into the private `backend/uploads` directory, validated
-as EPUB ZIP archives, and stored under generated UUID filenames. The default
+Uploads are streamed into the private `backend/uploads` directory. EPUB uploads
+are validated as EPUB ZIP archives; text-based PDFs are converted to EPUB and
+the generated EPUB is stored under a UUID filename. The default
 maximum upload size is 50 MiB. You can override `MAX_UPLOAD_SIZE_BYTES` and
 `UPLOAD_STORAGE_DIR` in `backend/.env`; uploaded files are not served directly
 by the frontend.
@@ -234,18 +234,18 @@ npm run dev
 Open the frontend URL printed by Vite (normally `http://localhost:5173`). The
 homepage lists works saved in PostgreSQL. Use the search field to find a work
 by title or author, then clear the search to return to the full archive. Click
-“Download EPUB” on a work card to download its original EPUB under its original
-filename.
+“Download EPUB” on a work card to download its EPUB file.
 
-With the backend running, upload a real EPUB from the repository root using:
+With the backend running, upload an EPUB or a text-based PDF from the repository
+root using:
 
 ```bash
-curl -F "file=@/path/to/book.epub" http://localhost:8000/api/works/upload
+curl -F "file=@/path/to/book.pdf" http://localhost:8000/api/works/upload
 ```
 
-The response contains the extracted work metadata and file record. The
-original EPUB is saved under `backend/uploads` with its original filename
-recorded in PostgreSQL.
+The response contains the extracted work metadata and EPUB file record. PDF
+uploads are converted and saved as EPUB under `backend/uploads`; EPUB uploads
+are saved unchanged. The uploaded filename is recorded in PostgreSQL.
 
 ## Test
 
@@ -256,8 +256,8 @@ pytest
 ```
 
 The tests insert and retrieve temporary database records and exercise EPUB
-metadata extraction, original-file preservation, invalid-upload rejection,
-and cleanup after database failure. Ensure PostgreSQL is running and the
+metadata extraction, PDF-to-EPUB conversion, invalid-upload rejection, and
+cleanup after database failure. Ensure PostgreSQL is running and the
 migration has been applied before running tests.
 
 From `Archive_of_your_own/frontend`, verify the production bundle builds:

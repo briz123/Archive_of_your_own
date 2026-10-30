@@ -53,6 +53,18 @@ async def stage_upload(upload: UploadFile) -> StagedUpload:
             temporary_path.unlink(missing_ok=True)
 
 
+def describe_staged_file(path: Path) -> StagedUpload:
+    size = path.stat().st_size
+    if size > MAX_UPLOAD_SIZE_BYTES:
+        raise UploadTooLargeError("The converted EPUB exceeds the configured size limit.")
+
+    checksum = hashlib.sha256()
+    with path.open("rb") as staged_file:
+        while chunk := staged_file.read(CHUNK_SIZE_BYTES):
+            checksum.update(chunk)
+    return StagedUpload(path, size, checksum.hexdigest())
+
+
 def store_staged_upload(staged_upload: StagedUpload) -> Tuple[str, Path]:
     storage_filename = f"{uuid4().hex}.epub"
     stored_path = UPLOAD_STORAGE_DIR / storage_filename

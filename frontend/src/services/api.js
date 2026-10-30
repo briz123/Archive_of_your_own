@@ -61,7 +61,7 @@ export async function uploadWork(file) {
     const detail =
       typeof result?.detail === "string"
         ? result.detail
-        : `Could not upload the EPUB (HTTP ${response.status}).`;
+        : `Could not upload the file (HTTP ${response.status}).`;
     throw new Error(detail);
   }
   if (!result || typeof result.title !== "string") {

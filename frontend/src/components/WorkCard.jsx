@@ -88,7 +88,11 @@ function WorkCard({ work }) {
               <a
                 className="download-link"
                 href={`/api/works/${work.id}/download`}
-                aria-label={`Download ${file.original_filename}`}
+                aria-label={
+                  file.original_filename.toLowerCase().endsWith(".pdf")
+                    ? `Download EPUB converted from ${file.original_filename}`
+                    : `Download ${file.original_filename}`
+                }
               >
                 Download {file.file_format}
               </a>

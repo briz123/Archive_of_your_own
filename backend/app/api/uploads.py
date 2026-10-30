@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -13,9 +14,11 @@ from app.services.file_validation import (
     validate_epub,
 )
 from app.services.metadata import EPUBMetadataError, extract_metadata
+from app.services.pdf_conversion import InvalidPDFError, convert_pdf_to_epub
 from app.services.storage import (
     StagedUpload,
     UploadTooLargeError,
+    describe_staged_file,
     stage_upload,
     store_staged_upload,
 )
@@ -38,12 +41,26 @@ async def upload_work(
         raise HTTPException(status_code=400, detail=str(error)) from error
 
     staged_upload: Optional[StagedUpload] = None
+    source_upload: Optional[StagedUpload] = None
+    converted_path: Optional[Path] = None
     stored_path = None
     committed = False
     try:
-        staged_upload = await stage_upload(file)
-        file_size = validate_epub(staged_upload.path, original_filename)
-        metadata = extract_metadata(staged_upload.path, original_filename)
+        source_upload = await stage_upload(file)
+        file_extension = Path(original_filename).suffix.lower()
+        if file_extension == ".pdf":
+            converted_path = convert_pdf_to_epub(source_upload.path, original_filename)
+            staged_upload = describe_staged_file(converted_path)
+            metadata_filename = f"{Path(original_filename).stem}.epub"
+        elif file_extension == ".epub":
+            staged_upload = source_upload
+            validate_epub(staged_upload.path, original_filename)
+            metadata_filename = original_filename
+        else:
+            raise InvalidEPUBError("Only .epub and .pdf files are accepted.")
+
+        file_size = staged_upload.file_size
+        metadata = extract_metadata(staged_upload.path, metadata_filename)
 
         work = Work(
             title=metadata["title"] or original_filename.rsplit(".", maxsplit=1)[0],
@@ -111,11 +128,17 @@ async def upload_work(
         return work
     except UploadTooLargeError as error:
         raise HTTPException(status_code=413, detail=str(error)) from error
-    except (InvalidEPUBError, EPUBMetadataError) as error:
+    except (InvalidEPUBError, InvalidPDFError, EPUBMetadataError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     finally:
         await file.close()
-        if staged_upload is not None:
+        if source_upload is not None:
+            source_upload.path.unlink(missing_ok=True)
+        if converted_path is not None:
+            converted_path.unlink(missing_ok=True)
+        if staged_upload is not None and (
+            source_upload is None or staged_upload.path != source_upload.path
+        ):
             staged_upload.path.unlink(missing_ok=True)
         if not committed:
             db.rollback()

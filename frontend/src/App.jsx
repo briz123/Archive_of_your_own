@@ -337,7 +337,7 @@ function App() {
                 <div className="sidebar-note">
                   <span className="note-icon" aria-hidden="true">✦</span>
                   <h3>Made for your library</h3>
-                  <p>Save a personal EPUB copy to your device and revisit it whenever you like.</p>
+                  <p>Upload a PDF or EPUB and download an EPUB copy for your library.</p>
                 </div>
               </aside>
             </div>

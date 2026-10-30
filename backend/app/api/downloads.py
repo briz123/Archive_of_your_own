@@ -40,8 +40,13 @@ def download_work(
         raise HTTPException(status_code=404, detail="Stored file not found")
 
     original_filename = Path(work_file.original_filename).name
+    download_filename = (
+        f"{Path(original_filename).stem}.epub"
+        if work_file.file_format == "EPUB"
+        else original_filename
+    )
     return FileResponse(
         path=stored_path,
         media_type="application/epub+zip",
-        filename=original_filename,
+        filename=download_filename,
     )
