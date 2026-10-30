@@ -103,9 +103,8 @@ AYO is under development. The current prototype uses React, Python/FastAPI,
 PostgreSQL, SQLAlchemy, and Alembic. Email/password accounts and owner-scoped
 library APIs are implemented. EPUB and PDF metadata extraction now runs in the
 browser and does not upload the selected file. Saving an import creates a
-private work record and local-file metadata record. Legacy backend upload
-routes still exist for older server-stored files but are not used by the
-current frontend import form.
+private work record and local-file metadata record. The backend has no
+server-side book upload or download routes.
 
 The prototype is experimental and should not be relied upon as the sole catalog
 or backup of any work.
@@ -151,9 +150,9 @@ npm install
 ```
 
 The virtual environment isolates this project's Python packages. The backend
-reads `DATABASE_URL` from `backend/.env`; that file is ignored by Git. Edit the
-URL if your local PostgreSQL username or database differs. Vite forwards its
-`/api` requests to FastAPI for local frontend/backend communication.
+reads `DATABASE_URL` from `backend/.env`; local `.env` files are ignored by
+Git. Edit the URL if your local PostgreSQL username or database differs. Vite
+forwards its `/api` requests to FastAPI for local frontend/backend communication.
 
 ## Browser metadata extraction
 
@@ -191,27 +190,22 @@ From `Archive_of_your_own/backend`, with the virtual environment activated:
 alembic upgrade head
 ```
 
-The following upload/download API instructions describe legacy prototype
-routes. The current frontend metadata extractor does not call these endpoints.
-
 Create an account or sign in through the frontend. The backend sets an
-HttpOnly, SameSite=Lax session cookie and a separate CSRF cookie; the session
+HttpOnly session cookie and a separate CSRF cookie; the session
 token is stored only as a hash in PostgreSQL. Set `SESSION_COOKIE_SECURE=true`
 when serving the app over HTTPS. Configure `TRUSTED_FRONTEND_ORIGINS` for the
-frontend origins that are allowed to register or sign in. Registration requires
+frontend origins that are allowed to register or sign in. For the Pages and
+Render deployment, set `SESSION_COOKIE_SAMESITE=none`; this requires secure
+cookies. Registration requires
 a valid email, matching passwords of at least 12 characters, and stores an
 Argon2 password hash. `POST /api/auth/logout` invalidates the current session.
 
-Library and legacy file routes require a valid session and scope work access to
-its owner. `GET /api/health` remains public. The backend exposes `GET /api/works`,
+Library routes require a valid session and scope work access to its owner.
+`GET /api/health` remains public. The backend exposes `GET /api/works`,
 `POST /api/works` to save imported metadata without file contents, and
 `GET /api/works/{id}` to retrieve stored work metadata,
-`PUT /api/works/{id}` to edit metadata without changing the stored file,
-`POST /api/works/upload` to add an EPUB or PDF, and
-`GET /api/works/{id}/download` to download its EPUB file. PDF uploads are
-converted to EPUB during upload; scanned PDFs without extractable text are not
-supported. The
-works list accepts an optional `search` query to match titles, authors,
+`PUT /api/works/{id}` to edit metadata. The works list accepts an optional
+`search` query to match titles, authors,
 descriptions, tags, and tag aliases without regard to capitalization, for
 example `GET /api/works?search=hermione`.
 `GET /api/works/filters` returns the available database-backed filter choices.
@@ -242,13 +236,6 @@ categories listed above. For example:
 }
 ```
 
-Uploads are streamed into the private `backend/uploads` directory. EPUB uploads
-are validated as EPUB ZIP archives; text-based PDFs are converted to EPUB and
-the generated EPUB is stored under a UUID filename. The default
-maximum upload size is 50 MiB. You can override `MAX_UPLOAD_SIZE_BYTES` and
-`UPLOAD_STORAGE_DIR` in `backend/.env`; uploaded files are not served directly
-by the frontend.
-
 ## Run locally
 
 Open two terminals in the repository root. Activate the Python environment in
@@ -274,9 +261,37 @@ homepage lists works saved in PostgreSQL. Use the search field to find a work
 by title or author, then clear the search to return to your library. Import an
 EPUB or PDF from the sidebar; AYO saves its metadata and fingerprint while the
 original stays on your computer. New local-file records cannot be downloaded
-from AYO because the application does not retain those files. The legacy
-`POST /api/works/upload` endpoint still stores files on the server and is not
-part of the local-first import flow.
+from AYO because the application does not retain those files. Earlier
+server-stored files, if any, are not automatically removed by this code change;
+clean up old deployment storage separately if needed.
+
+## Deploy the backend to Render
+
+The root `render.yaml` configures the existing FastAPI application as a Render
+web service. It installs `backend/requirements.txt`, runs
+`uvicorn app.main:app --host 0.0.0.0 --port $PORT`, and checks
+`/api/health`. Link the repository to Render and create the service from the
+Blueprint. In the service environment, provide `DATABASE_URL` privately for
+your existing PostgreSQL database. The database must be reachable from Render;
+a database running only on your computer will not work. Apply migrations with
+`alembic upgrade head` from the backend directory before using the API. The
+application normalizes Render's `postgres://` URL prefix for SQLAlchemy.
+
+The Pages build reads the repository Actions variable `VITE_API_BASE_URL`.
+After Render creates the service, set it to the full service origin, such as
+`https://your-service.onrender.com` (no trailing slash), under
+**Settings → Secrets and variables → Actions → Variables**, then rerun the
+Pages workflow. Render is configured to trust
+`https://briz123.github.io`; cookies are configured for HTTPS cross-site
+requests.
+
+Important: the Pages site and a Render `onrender.com` service are different
+sites. Browsers that block third-party cookies may prevent cookie-based login
+even with `SameSite=None`. For reliable authentication across browsers, use a
+custom domain arrangement that puts the frontend and API on the same site, or
+choose a hosting/proxy setup that makes API requests same-origin. GitHub Pages
+and Render can serve the frontend and API separately, but this browser cookie
+limitation cannot be fixed by CORS configuration alone.
 
 ## GitHub Pages
 
@@ -298,11 +313,10 @@ From `Archive_of_your_own/backend`, with the virtual environment activated:
 pytest
 ```
 
-The tests insert and retrieve temporary database records and exercise EPUB
-metadata extraction, PDF-to-EPUB conversion, invalid-upload rejection, and
-cleanup after database failure. Authentication tests cover registration,
-login, logout, CSRF validation, and cross-account access. Ensure PostgreSQL is
-running and the migration has been applied before running tests.
+The tests cover metadata-only work imports, authentication, CSRF validation,
+cross-account access, and the absence of server-side file upload/download
+routes. Ensure PostgreSQL is running and the migration has been applied before
+running tests.
 
 From `Archive_of_your_own/frontend`, verify the production bundle builds:
 
