@@ -31,11 +31,29 @@ function formatDescription(description) {
   return parsed.body.textContent.replace(/\s+/g, " ").trim();
 }
 
-function WorkCard({ work }) {
+function WorkCard({
+  work,
+  isStaticDemo = false,
+  selected,
+  onSelectionChange,
+  selectionDisabled,
+}) {
   return (
     <article className="work-card">
       <div className="work-card-heading">
         <div>
+          {!isStaticDemo && (
+            <label className="work-select">
+              <input
+                type="checkbox"
+                checked={selected}
+                onChange={(event) => onSelectionChange(work.id, event.target.checked)}
+                disabled={selectionDisabled}
+                aria-label={`Select ${work.title} for bulk download`}
+              />
+              Select for download
+            </label>
+          )}
           <h3>{work.title}</h3>
           {work.original_author && (
             <p className="work-author">by {work.original_author}</p>
@@ -85,17 +103,21 @@ function WorkCard({ work }) {
                 <strong>{file.file_format}</strong>
                 <span className="file-size">{formatFileSize(file.file_size)}</span>
               </span>
-              <a
-                className="download-link"
-                href={`/api/works/${work.id}/download`}
-                aria-label={
-                  file.original_filename.toLowerCase().endsWith(".pdf")
-                    ? `Download EPUB converted from ${file.original_filename}`
-                    : `Download ${file.original_filename}`
-                }
-              >
-                Download {file.file_format}
-              </a>
+              {isStaticDemo ? (
+                <span className="download-unavailable">Preview only</span>
+              ) : (
+                <a
+                  className="download-link"
+                  href={`/api/works/${work.id}/download`}
+                  aria-label={
+                    file.original_filename.toLowerCase().endsWith(".pdf")
+                      ? `Download EPUB converted from ${file.original_filename}`
+                      : `Download ${file.original_filename}`
+                  }
+                >
+                  Download {file.file_format}
+                </a>
+              )}
             </li>
           ))}
         </ul>

@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 
 import { uploadWork } from "../services/api.js";
 
-function UploadForm({ onUploaded }) {
+function UploadForm({ onUploaded, isStaticDemo = false }) {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -40,31 +40,40 @@ function UploadForm({ onUploaded }) {
   return (
     <section className="upload-section" aria-labelledby="upload-heading">
       <h2 id="upload-heading">Upload a fic</h2>
-      <p>Upload an EPUB or PDF. PDFs are converted to EPUB for download.</p>
-      <form className="upload-form" onSubmit={handleSubmit}>
-        <label htmlFor="work-upload">EPUB or PDF file</label>
-        <input
-          ref={inputRef}
-          id="work-upload"
-          type="file"
-          accept=".epub,.pdf,application/epub+zip,application/pdf"
-          onChange={(event) => {
-            setFile(event.target.files?.[0] || null);
-            setError("");
-            setSuccess("");
-          }}
-          disabled={uploading}
-        />
-        <button type="submit" disabled={!file || uploading}>
-          {uploading
-            ? isPdf
-              ? "Uploading and converting..."
-              : "Uploading..."
-            : "Upload"}
-        </button>
-      </form>
-      {error && <p className="upload-error" role="alert">{error}</p>}
-      {success && <p className="upload-success" role="status">{success}</p>}
+      {isStaticDemo ? (
+        <p>
+          Uploads are disabled in this static preview. The live app needs its
+          backend to store files.
+        </p>
+      ) : (
+        <>
+          <p>Upload an EPUB or PDF. PDFs are converted to EPUB for download.</p>
+          <form className="upload-form" onSubmit={handleSubmit}>
+            <label htmlFor="work-upload">EPUB or PDF file</label>
+            <input
+              ref={inputRef}
+              id="work-upload"
+              type="file"
+              accept=".epub,.pdf,application/epub+zip,application/pdf"
+              onChange={(event) => {
+                setFile(event.target.files?.[0] || null);
+                setError("");
+                setSuccess("");
+              }}
+              disabled={uploading}
+            />
+            <button type="submit" disabled={!file || uploading}>
+              {uploading
+                ? isPdf
+                  ? "Uploading and converting..."
+                  : "Uploading..."
+                : "Upload"}
+            </button>
+          </form>
+          {error && <p className="upload-error" role="alert">{error}</p>}
+          {success && <p className="upload-success" role="status">{success}</p>}
+        </>
+      )}
     </section>
   );
 }

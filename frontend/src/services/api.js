@@ -70,3 +70,22 @@ export async function uploadWork(file) {
 
   return result;
 }
+
+export async function downloadWorkBundle(workIds) {
+  const response = await fetch("/api/works/download-bundle", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ work_ids: workIds }),
+  });
+
+  if (!response.ok) {
+    const result = await response.json();
+    const detail =
+      typeof result?.detail === "string"
+        ? result.detail
+        : `Could not download the selected works (HTTP ${response.status}).`;
+    throw new Error(detail);
+  }
+
+  return response.blob();
+}

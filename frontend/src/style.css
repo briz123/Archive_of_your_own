@@ -454,6 +454,17 @@ button:disabled {
   font-size: 0.85rem;
 }
 
+.demo-notice {
+  margin: 0 0 1.25rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid #e8d6ca;
+  border-radius: 0.55rem;
+  background: #faf2ed;
+  color: var(--color-wine);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
 .sort-control {
   display: flex;
   flex-wrap: wrap;
@@ -498,6 +509,72 @@ button:disabled {
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
+}
+
+.work-select {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.45rem;
+  color: var(--color-muted);
+  font-size: 0.78rem;
+}
+
+.work-select input {
+  accent-color: var(--color-wine);
+}
+
+.download-unavailable {
+  color: var(--color-muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.bulk-download-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 1rem 0;
+  padding: 0.8rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.65rem;
+  background: var(--color-paper);
+}
+
+.bulk-download-controls > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.bulk-download-controls [role="status"] {
+  color: var(--color-muted);
+  font-size: 0.82rem;
+}
+
+.bulk-download-controls button {
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.4rem;
+  background: white;
+  color: var(--color-wine);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.bulk-download-controls .bulk-download-button {
+  border-color: var(--color-wine);
+  background: var(--color-wine);
+  color: white;
+}
+
+.bulk-download-controls button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .work-card h3 {

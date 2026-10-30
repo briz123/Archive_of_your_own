@@ -1,10 +1,18 @@
 import { useEffect, useState } from "react";
 
-import { fetchFilterOptions, fetchWorks } from "./services/api.js";
+import {
+  downloadWorkBundle,
+  fetchFilterOptions,
+  fetchWorks,
+} from "./services/api.js";
 import AdvancedFilters, { EMPTY_FILTERS } from "./components/AdvancedFilters.jsx";
 import SearchBar from "./components/SearchBar.jsx";
 import UploadForm from "./components/UploadForm.jsx";
 import WorkCard from "./components/WorkCard.jsx";
+import { demoFilterOptions, demoWorks } from "./demoData.js";
+
+const MAX_BULK_DOWNLOAD_SELECTION = 50;
+const STATIC_DEMO = import.meta.env.VITE_STATIC_DEMO === "true";
 
 function App() {
   const [acceptedDisclaimer, setAcceptedDisclaimer] = useState(
@@ -22,6 +30,9 @@ function App() {
   const [error, setError] = useState("");
   const [retryCount, setRetryCount] = useState(0);
   const [searchResetKey, setSearchResetKey] = useState(0);
+  const [selectedWorkIds, setSelectedWorkIds] = useState([]);
+  const [bundleDownloading, setBundleDownloading] = useState(false);
+  const [bundleError, setBundleError] = useState("");
   const advancedSearchEnabled = filterOptions?.advanced_search_enabled === true;
 
   useEffect(() => {
@@ -29,6 +40,12 @@ function App() {
 
     async function loadFilterOptions() {
       if (!acceptedDisclaimer) {
+        return;
+      }
+
+      if (STATIC_DEMO) {
+        setFilterOptions(demoFilterOptions);
+        setFilterOptionsError("");
         return;
       }
 
@@ -63,6 +80,28 @@ function App() {
 
       setStatus("loading");
       setError("");
+      if (STATIC_DEMO) {
+        const searchTerm = search.trim().toLocaleLowerCase();
+        const selectedFandomIds = filters.fandom_id.map(String);
+        const matchingWorks = demoWorks.filter((work) => {
+          const matchesSearch =
+            !searchTerm ||
+            work.title.toLocaleLowerCase().includes(searchTerm) ||
+            work.original_author.toLocaleLowerCase().includes(searchTerm);
+          const matchesFandom =
+            selectedFandomIds.length === 0 ||
+            work.tags.some(
+              (tag) =>
+                tag.tag_type === "fandom" &&
+                selectedFandomIds.includes(String(tag.id)),
+            );
+          return matchesSearch && matchesFandom;
+        });
+        setWorks(matchingWorks);
+        setStatus("success");
+        return;
+      }
+
       try {
         const activeFilters = advancedSearchEnabled
           ? filters
@@ -115,6 +154,66 @@ function App() {
     setRetryCount((count) => count + 1);
   }
 
+  function updateWorkSelection(workId, selected) {
+    if (
+      selected &&
+      !selectedWorkIds.includes(workId) &&
+      selectedWorkIds.length >= MAX_BULK_DOWNLOAD_SELECTION
+    ) {
+      setBundleError(
+        `You can select up to ${MAX_BULK_DOWNLOAD_SELECTION} works per download.`,
+      );
+      return;
+    }
+
+    setSelectedWorkIds((current) =>
+      selected
+        ? [...new Set([...current, workId])]
+        : current.filter((id) => id !== workId),
+    );
+    setBundleError("");
+  }
+
+  function selectVisibleWorks() {
+    const allSelected = [
+      ...new Set([...selectedWorkIds, ...works.map((work) => work.id)]),
+    ];
+    if (allSelected.length > MAX_BULK_DOWNLOAD_SELECTION) {
+      setBundleError(
+        `You can select up to ${MAX_BULK_DOWNLOAD_SELECTION} works per download.`,
+      );
+      setSelectedWorkIds(allSelected.slice(0, MAX_BULK_DOWNLOAD_SELECTION));
+      return;
+    }
+    setSelectedWorkIds(allSelected);
+    setBundleError("");
+  }
+
+  async function handleBulkDownload() {
+    if (selectedWorkIds.length === 0 || bundleDownloading) {
+      return;
+    }
+    setBundleDownloading(true);
+    setBundleError("");
+    try {
+      const bundle = await downloadWorkBundle(selectedWorkIds);
+      const downloadUrl = URL.createObjectURL(bundle);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = "fanfics-with-metadata.zip";
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+    } catch (downloadError) {
+      setBundleError(
+        downloadError.message || "The selected works could not be downloaded.",
+      );
+    } finally {
+      setBundleDownloading(false);
+    }
+  }
+
   function acceptDisclaimer() {
     try {
       sessionStorage.setItem("ayo-disclaimer-accepted", "true");
@@ -136,7 +235,11 @@ function App() {
   return (
     <div className="site-shell">
       <header className="site-header">
-        <a className="site-brand" href="/" aria-label="Archive of Your Own home">
+        <a
+          className="site-brand"
+          href={import.meta.env.BASE_URL}
+          aria-label="Archive of Your Own home"
+        >
           <span className="brand-mark" aria-hidden="true">AOY</span>
           <span className="brand-name">Archive <span>of Your Own</span></span>
         </a>
@@ -210,6 +313,13 @@ function App() {
               </p>
               <a className="hero-link" href="#library">Browse the collection <span aria-hidden="true">↓</span></a>
             </section>
+
+            {STATIC_DEMO && (
+              <p className="demo-notice" role="status">
+                Static preview with sample stories. Uploads and downloads need
+                the live backend and are disabled here.
+              </p>
+            )}
 
             <div className="content-grid">
               <div className="primary-content">
@@ -323,17 +433,79 @@ function App() {
                     ) : (
                       <p className="empty-state">No works have been uploaded yet. Check back soon.</p>
                     ))}
+                  {status === "success" &&
+                    !STATIC_DEMO &&
+                    (works.length > 0 || selectedWorkIds.length > 0) && (
+                    <>
+                      <div className="bulk-download-controls">
+                        <div>
+                          <span role="status">
+                            {selectedWorkIds.length} selected · Up to{" "}
+                            {MAX_BULK_DOWNLOAD_SELECTION} per download
+                          </span>
+                          <button
+                            type="button"
+                            onClick={selectVisibleWorks}
+                            disabled={bundleDownloading}
+                          >
+                            Select all shown
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedWorkIds([]);
+                              setBundleError("");
+                            }}
+                            disabled={
+                              selectedWorkIds.length === 0 || bundleDownloading
+                            }
+                          >
+                            Clear selection
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          className="bulk-download-button"
+                          onClick={handleBulkDownload}
+                          disabled={
+                            selectedWorkIds.length === 0 || bundleDownloading
+                          }
+                        >
+                          {bundleDownloading
+                            ? "Preparing download..."
+                            : `Download ${selectedWorkIds.length} selected + Excel`}
+                        </button>
+                      </div>
+                      {bundleError && (
+                        <p className="works-error" role="alert">{bundleError}</p>
+                      )}
+                    </>
+                  )}
                   {status === "success" && works.length > 0 && (
                     <div className="work-list">
                       {works.map((work) => (
-                        <WorkCard key={work.id} work={work} />
+                        <WorkCard
+                          key={work.id}
+                          work={work}
+                          isStaticDemo={STATIC_DEMO}
+                          selected={selectedWorkIds.includes(work.id)}
+                          onSelectionChange={updateWorkSelection}
+                          selectionDisabled={
+                            bundleDownloading ||
+                            (!selectedWorkIds.includes(work.id) &&
+                              selectedWorkIds.length >= MAX_BULK_DOWNLOAD_SELECTION)
+                          }
+                        />
                       ))}
                     </div>
                   )}
                 </section>
               </div>
               <aside id="upload" className="sidebar">
-                <UploadForm onUploaded={handleUploaded} />
+                <UploadForm
+                  onUploaded={handleUploaded}
+                  isStaticDemo={STATIC_DEMO}
+                />
                 <div className="sidebar-note">
                   <span className="note-icon" aria-hidden="true">✦</span>
                   <h3>Made for your library</h3>
