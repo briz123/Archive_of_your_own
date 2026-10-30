@@ -1,0 +1,38 @@
+:root {
+  font-family: Arial, sans-serif;
+  color: #25212a;
+  background: #f7f4f8;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+main {
+  max-width: 720px;
+  margin: 4rem auto;
+  padding: 0 1.5rem;
+}
+
+h1 {
+  color: #6b315d;
+}
+
+section {
+  margin-top: 2rem;
+  padding: 1.25rem;
+  border: 1px solid #ded5e0;
+  border-radius: 0.5rem;
+  background: white;
+}
+
+[data-status="ok"] {
+  color: #246b3d;
+}
+
+[data-status="error"] {
+  color: #a32727;
+}
