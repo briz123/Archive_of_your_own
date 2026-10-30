@@ -36,6 +36,16 @@ def make_epub() -> bytes:
     <dc:creator>Test Author</dc:creator>
     <dc:description>&lt;p&gt;A description from the test EPUB.&lt;/p&gt;</dc:description>
     <dc:language>en</dc:language>
+    <dc:subject>Teen And Up Audiences</dc:subject>
+    <dc:subject>Harry Potter</dc:subject>
+    <dc:subject>Hermione Granger/Draco Malfoy</dc:subject>
+    <dc:subject>Other Relationship Tags to Be Added</dc:subject>
+    <dc:subject>Hermione Granger</dc:subject>
+    <dc:subject>Other Character Tags to Be Added</dc:subject>
+    <dc:subject>Slow Burn</dc:subject>
+    <dc:subject>Other Additional Tags to Be Added</dc:subject>
+    <dc:subject>F/M</dc:subject>
+    <dc:subject>Major Character Death</dc:subject>
   </metadata>
   <manifest/>
   <spine/>
@@ -70,6 +80,17 @@ def test_upload_extracts_metadata_and_preserves_original(
     assert work_data["original_author"] == "Test Author"
     assert work_data["description"] == "A description from the test EPUB."
     assert work_data["language"] == "en"
+    assert work_data["rating"] == "Teen And Up Audiences"
+    assert work_data["category"] == "F/M"
+    assert work_data["warnings"] == ["Major Character Death"]
+    assert {
+        (tag["name"], tag["tag_type"]) for tag in work_data["tags"]
+    } == {
+        ("Harry Potter", "fandom"),
+        ("Hermione Granger/Draco Malfoy", "relationship"),
+        ("Hermione Granger", "character"),
+        ("Slow Burn", "additional"),
+    }
     assert len(work_data["files"]) == 1
     assert work_data["files"][0]["original_filename"] == "sample.epub"
     assert work_data["files"][0]["file_format"] == "EPUB"

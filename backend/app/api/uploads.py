@@ -1,10 +1,11 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Work, WorkFile
+from app.models import ArchiveWarning, Tag, TagAlias, Work, WorkFile
 from app.schemas.work import WorkRead
 from app.services.file_validation import (
     InvalidEPUBError,
@@ -49,9 +50,49 @@ async def upload_work(
             original_author=metadata["original_author"],
             description=metadata["description"],
             language=metadata["language"],
+            rating=metadata["rating"],
+            category=metadata["category"],
         )
         db.add(work)
         db.flush()
+
+        for extracted_tag in metadata["tags"]:
+            tag = db.scalar(
+                select(Tag).where(
+                    func.lower(Tag.name) == extracted_tag["name"].lower(),
+                    Tag.tag_type == extracted_tag["tag_type"],
+                )
+            )
+            if tag is None:
+                alias = db.scalar(
+                    select(TagAlias).where(
+                        func.lower(TagAlias.alias_name)
+                        == extracted_tag["name"].lower()
+                    )
+                )
+                if alias is not None:
+                    if alias.canonical_tag.tag_type != extracted_tag["tag_type"]:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="An EPUB tag alias conflicts with its tag type.",
+                        )
+                    tag = alias.canonical_tag
+                else:
+                    tag = Tag(
+                        name=extracted_tag["name"],
+                        tag_type=extracted_tag["tag_type"],
+                    )
+                    db.add(tag)
+            work.tags.append(tag)
+
+        if metadata["warnings"]:
+            work.warnings = list(
+                db.scalars(
+                    select(ArchiveWarning).where(
+                        ArchiveWarning.name.in_(metadata["warnings"])
+                    )
+                ).all()
+            )
 
         storage_filename, stored_path = store_staged_upload(staged_upload)
         db.add(

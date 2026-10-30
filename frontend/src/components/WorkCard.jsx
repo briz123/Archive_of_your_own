@@ -41,6 +41,31 @@ function WorkCard({ work }) {
       {work.description && (
         <p className="work-description">{formatDescription(work.description)}</p>
       )}
+      {work.tags?.length > 0 && (
+        <div className="work-tags" aria-label="Work tags">
+          {["fandom", "relationship", "character", "additional"].map(
+            (tagType) => {
+              const tags = work.tags.filter((tag) => tag.tag_type === tagType);
+              if (tags.length === 0) {
+                return null;
+              }
+
+              const label = {
+                fandom: "Fandoms",
+                relationship: "Relationships",
+                character: "Characters",
+                additional: "Additional tags",
+              }[tagType];
+              return (
+                <p key={tagType}>
+                  <strong>{label}:</strong>{" "}
+                  {tags.map((tag) => tag.name).join(", ")}
+                </p>
+              );
+            },
+          )}
+        </div>
+      )}
       {work.language && <p className="work-language">Language: {work.language}</p>}
 
       {work.files.length > 0 && (
@@ -50,9 +75,13 @@ function WorkCard({ work }) {
               <span>
                 {file.file_format} · {formatFileSize(file.file_size)}
               </span>
-              <button type="button" disabled aria-label="Download not yet available">
-                Download {file.file_format} — coming soon
-              </button>
+              <a
+                className="download-link"
+                href={`/api/works/${work.id}/download`}
+                aria-label={`Download ${file.original_filename}`}
+              >
+                Download {file.file_format}
+              </a>
             </li>
           ))}
         </ul>

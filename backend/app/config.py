@@ -6,6 +6,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 MAX_UPLOAD_SIZE_BYTES = int(os.getenv("MAX_UPLOAD_SIZE_BYTES", str(50 * 1024 * 1024)))
+ADVANCED_SEARCH_ENABLED = os.getenv(
+    "ENABLE_ADVANCED_SEARCH", "false"
+).strip().lower() in {"1", "true", "yes", "on"}
 UPLOAD_STORAGE_DIR = Path(
     os.getenv("UPLOAD_STORAGE_DIR", str(Path(__file__).resolve().parents[1] / "uploads"))
 )
