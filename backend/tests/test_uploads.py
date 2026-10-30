@@ -34,7 +34,7 @@ def make_epub() -> bytes:
     <dc:identifier id="book-id">test-book-1</dc:identifier>
     <dc:title>Test EPUB Title</dc:title>
     <dc:creator>Test Author</dc:creator>
-    <dc:description>A description from the test EPUB.</dc:description>
+    <dc:description>&lt;p&gt;A description from the test EPUB.&lt;/p&gt;</dc:description>
     <dc:language>en</dc:language>
   </metadata>
   <manifest/>

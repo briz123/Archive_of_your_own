@@ -1,7 +1,16 @@
 :root {
+  --color-wine-dark: #5e0013;
+  --color-wine: #83041e;
+  --color-red-deep: #9a0b20;
+  --color-red: #b2152d;
+  --color-red-bright: #c7233c;
+  --color-ink: #2b2022;
+  --color-muted: #68585b;
+  --color-border: #ead9dc;
+  --color-paper: #fffafb;
   font-family: Arial, sans-serif;
-  color: #25212a;
-  background: #f7f4f8;
+  color: var(--color-ink);
+  background: var(--color-paper);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -12,27 +21,127 @@ body {
 }
 
 main {
-  max-width: 720px;
+  max-width: 900px;
   margin: 4rem auto;
   padding: 0 1.5rem;
 }
 
 h1 {
-  color: #6b315d;
+  color: var(--color-wine-dark);
 }
 
 section {
   margin-top: 2rem;
   padding: 1.25rem;
-  border: 1px solid #ded5e0;
+  border: 1px solid var(--color-border);
   border-radius: 0.5rem;
   background: white;
 }
 
-[data-status="ok"] {
-  color: #246b3d;
+.works-section {
+  border: 0;
+  padding: 0;
+  background: transparent;
 }
 
-[data-status="error"] {
-  color: #a32727;
+.work-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.work-card {
+  padding: 1.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: white;
+  box-shadow: 0 2px 8px rgb(94 0 19 / 7%);
+}
+
+.work-card h2 {
+  margin: 0;
+  color: var(--color-wine);
+}
+
+.work-author {
+  margin: 0.5rem 0;
+  color: var(--color-muted);
+}
+
+.work-description {
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.work-language,
+.work-uploaded {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
+.work-files {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1.25rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.work-files li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+
+button {
+  padding: 0.6rem 0.9rem;
+  border: 0;
+  border-radius: 0.35rem;
+  background: var(--color-red-deep);
+  color: white;
+  font: inherit;
+}
+
+button:not(:disabled):hover {
+  background: var(--color-wine-dark);
+}
+
+button:not(:disabled):focus-visible {
+  outline: 3px solid var(--color-red-bright);
+  outline-offset: 2px;
+}
+
+button:disabled {
+  background: var(--color-red-bright);
+  cursor: not-allowed;
+}
+
+.work-uploaded {
+  margin: 1rem 0 0;
+}
+
+.works-error {
+  color: var(--color-wine-dark);
+}
+
+.works-error button {
+  background: var(--color-red);
+}
+
+@media (max-width: 480px) {
+  main {
+    margin: 2rem auto;
+  }
+
+  .work-card {
+    padding: 1rem;
+  }
+
+  .work-files li {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
