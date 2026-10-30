@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.api.auth import CurrentUser
 from app.models import ArchiveWarning, Tag, TagAlias, Work, WorkFile
 from app.schemas.work import WorkRead
 from app.services.file_validation import (
@@ -32,6 +33,7 @@ router = APIRouter(prefix="/api/works", tags=["works"])
     status_code=status.HTTP_201_CREATED,
 )
 async def upload_work(
+    user: CurrentUser,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ) -> Work:
@@ -63,6 +65,7 @@ async def upload_work(
         metadata = extract_metadata(staged_upload.path, metadata_filename)
 
         work = Work(
+            user_id=user.id,
             title=metadata["title"] or original_filename.rsplit(".", maxsplit=1)[0],
             original_author=metadata["original_author"],
             description=metadata["description"],
@@ -76,6 +79,7 @@ async def upload_work(
         for extracted_tag in metadata["tags"]:
             tag = db.scalar(
                 select(Tag).where(
+                    Tag.user_id == user.id,
                     func.lower(Tag.name) == extracted_tag["name"].lower(),
                     Tag.tag_type == extracted_tag["tag_type"],
                 )
@@ -84,7 +88,8 @@ async def upload_work(
                 alias = db.scalar(
                     select(TagAlias).where(
                         func.lower(TagAlias.alias_name)
-                        == extracted_tag["name"].lower()
+                        == extracted_tag["name"].lower(),
+                        TagAlias.canonical_tag.has(Tag.user_id == user.id),
                     )
                 )
                 if alias is not None:
@@ -96,6 +101,7 @@ async def upload_work(
                     tag = alias.canonical_tag
                 else:
                     tag = Tag(
+                        user_id=user.id,
                         name=extracted_tag["name"],
                         tag_type=extracted_tag["tag_type"],
                     )
@@ -120,6 +126,8 @@ async def upload_work(
                 file_format="EPUB",
                 file_size=file_size,
                 checksum=staged_upload.checksum,
+                storage_provider="legacy_server",
+                status="stored",
             )
         )
         db.commit()

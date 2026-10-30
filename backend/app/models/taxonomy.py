@@ -77,12 +77,15 @@ work_warnings = Table(
 class Tag(Base):
     __tablename__ = "tags"
     __table_args__ = (
-        UniqueConstraint("name", "tag_type", name="uq_tags_name_type"),
+        UniqueConstraint("user_id", "name", "tag_type", name="uq_tags_user_name_type"),
         Index("ix_tags_name_lower", func.lower(text("name"))),
         Index("ix_tags_tag_type", "tag_type"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     name: Mapped[str] = mapped_column(String(300), nullable=False)
     tag_type: Mapped[TagType] = mapped_column(
         SqlEnum(
@@ -98,6 +101,7 @@ class Tag(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    owner: Mapped["User"] = relationship(back_populates="tags")
     works: Mapped[list["Work"]] = relationship(
         secondary=work_tags, back_populates="tags"
     )
@@ -109,7 +113,12 @@ class Tag(Base):
 class TagAlias(Base):
     __tablename__ = "tag_aliases"
     __table_args__ = (
-        Index("ix_tag_aliases_name_lower", func.lower(text("alias_name")), unique=True),
+        Index(
+            "ix_tag_aliases_name_lower",
+            func.lower(text("alias_name")),
+            "canonical_tag_id",
+            unique=True,
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

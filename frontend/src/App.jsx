@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 
-import { fetchFilterOptions, fetchWorks } from "./services/api.js";
+import {
+  fetchCurrentUser,
+  fetchFilterOptions,
+  fetchWorks,
+  logoutUser,
+} from "./services/api.js";
+import AuthForm from "./components/AuthForm.jsx";
 import AdvancedFilters, { EMPTY_FILTERS } from "./components/AdvancedFilters.jsx";
 import SearchBar from "./components/SearchBar.jsx";
 import UploadForm from "./components/UploadForm.jsx";
@@ -10,6 +16,10 @@ function App() {
   const [acceptedDisclaimer, setAcceptedDisclaimer] = useState(
     () => sessionStorage.getItem("ayo-disclaimer-accepted") === "true",
   );
+  const [authUser, setAuthUser] = useState(null);
+  const [authStatus, setAuthStatus] = useState("checking");
+  const [authError, setAuthError] = useState("");
+  const [loggingOut, setLoggingOut] = useState(false);
   const [acceptanceError, setAcceptanceError] = useState("");
   const [works, setWorks] = useState([]);
   const [search, setSearch] = useState("");
@@ -21,14 +31,42 @@ function App() {
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
   const [retryCount, setRetryCount] = useState(0);
-  const [searchResetKey, setSearchResetKey] = useState(0);
   const advancedSearchEnabled = filterOptions?.advanced_search_enabled === true;
+
+  useEffect(() => {
+    let active = true;
+    if (!acceptedDisclaimer) {
+      return () => {
+        active = false;
+      };
+    }
+
+    setAuthStatus("checking");
+    fetchCurrentUser()
+      .then((user) => {
+        if (active) {
+          setAuthUser(user);
+          setAuthStatus(user ? "authenticated" : "unauthenticated");
+        }
+      })
+      .catch((loadError) => {
+        if (active) {
+          setAuthUser(null);
+          setAuthStatus("unauthenticated");
+          setAuthError(loadError.message || "Could not check your sign-in status.");
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [acceptedDisclaimer]);
 
   useEffect(() => {
     let active = true;
 
     async function loadFilterOptions() {
-      if (!acceptedDisclaimer) {
+      if (!acceptedDisclaimer || !authUser) {
         return;
       }
 
@@ -51,13 +89,13 @@ function App() {
     return () => {
       active = false;
     };
-  }, [filterOptionsRetry, acceptedDisclaimer]);
+  }, [filterOptionsRetry, acceptedDisclaimer, authUser]);
 
   useEffect(() => {
     let active = true;
 
     async function loadWorks() {
-      if (!acceptedDisclaimer) {
+      if (!acceptedDisclaimer || !authUser) {
         return;
       }
 
@@ -84,7 +122,7 @@ function App() {
     return () => {
       active = false;
     };
-  }, [search, filters, retryCount, advancedSearchEnabled, acceptedDisclaimer]);
+  }, [search, filters, retryCount, advancedSearchEnabled, acceptedDisclaimer, authUser]);
 
   function updateFilter(name, value) {
     setFilters((current) => ({ ...current, [name]: value }));
@@ -103,16 +141,9 @@ function App() {
       exclude_tag_id: [],
       completion_status: [],
       language: [],
-      sort: "recent",
+      sort: "recently_added",
     });
     setFandomQuery("");
-  }
-
-  function handleUploaded() {
-    setSearch("");
-    setSearchResetKey((key) => key + 1);
-    clearFilters();
-    setRetryCount((count) => count + 1);
   }
 
   function acceptDisclaimer() {
@@ -127,10 +158,36 @@ function App() {
     }
   }
 
+  function handleAuthenticated(user) {
+    setAuthError("");
+    setAuthUser(user);
+    setAuthStatus("authenticated");
+  }
+
+  async function handleLogout() {
+    if (loggingOut) {
+      return;
+    }
+    setLoggingOut(true);
+    setAuthError("");
+    try {
+      await logoutUser();
+      setAuthUser(null);
+      setAuthStatus("unauthenticated");
+      setWorks([]);
+      setFilterOptions(null);
+      setStatus("loading");
+    } catch (logoutError) {
+      setAuthError(logoutError.message || "Could not sign out.");
+    } finally {
+      setLoggingOut(false);
+    }
+  }
+
   const hasActiveFilters = Object.entries(filters).some(
     ([name, value]) =>
       (Array.isArray(value) && value.length > 0) ||
-      (name === "sort" && value !== "recent"),
+      (name === "sort" && value !== "recently_added"),
   );
 
   return (
@@ -140,10 +197,13 @@ function App() {
           <span className="brand-mark" aria-hidden="true">AOY</span>
           <span className="brand-name">Archive <span>of Your Own</span></span>
         </a>
-        {acceptedDisclaimer && (
+        {acceptedDisclaimer && authUser && (
           <nav className="site-nav" aria-label="Main navigation">
             <a href="#library">My library</a>
             <a href="#upload">Import a file</a>
+            <button type="button" onClick={handleLogout} disabled={loggingOut}>
+              {loggingOut ? "Signing out..." : "Sign out"}
+            </button>
           </nav>
         )}
       </header>
@@ -187,10 +247,9 @@ function App() {
                 </li>
               </ul>
               <p className="prototype-notice">
-                Prototype limitation: this version does not yet have private
-                accounts or local-only importing. Selected files are currently
-                sent to and stored on the backend, and the works list is shared.
-                Do not import files unless you are comfortable with this.
+                AYO supports private accounts and reads selected files in your
+                browser. Only extracted metadata is saved to your library; the
+                original files stay on your computer.
               </p>
               {acceptanceError && (
                 <p className="disclaimer-error" role="alert">
@@ -201,6 +260,22 @@ function App() {
                 I understand and accept <span aria-hidden="true">→</span>
               </button>
             </section>
+          </>
+        ) : authStatus === "checking" ? (
+          <section className="auth-panel" aria-live="polite">
+            <p role="status">Checking your sign-in status...</p>
+          </section>
+        ) : !authUser ? (
+          <>
+            <section className="welcome-hero" aria-labelledby="welcome-heading">
+              <p className="eyebrow">A personal library for stories you love</p>
+              <h1 id="welcome-heading">Your collection, all in one place.</h1>
+              <p>
+                Sign in to manage your private catalog of fanfiction works.
+              </p>
+            </section>
+            {authError && <p className="auth-error" role="alert">{authError}</p>}
+            <AuthForm onAuthenticated={handleAuthenticated} />
           </>
         ) : (
           <>
@@ -220,7 +295,7 @@ function App() {
                   <div className="section-heading">
                     <div>
                       <p className="eyebrow">The collection</p>
-                      <h2>Explore works</h2>
+                      <h2>My library</h2>
                     </div>
                     {status === "success" && works.length > 0 && (
                       <span className="work-count">
@@ -229,7 +304,6 @@ function App() {
                     )}
                   </div>
                   <SearchBar
-                    key={searchResetKey}
                     initialSearch={search}
                     onSearch={setSearch}
                     disabled={status === "loading"}
@@ -336,7 +410,7 @@ function App() {
                 </section>
               </div>
               <aside id="upload" className="sidebar">
-                <UploadForm onUploaded={handleUploaded} />
+                <UploadForm onSaved={() => setRetryCount((count) => count + 1)} />
                 <div className="sidebar-note">
                   <span className="note-icon" aria-hidden="true">✦</span>
                   <h3>Your library, organized</h3>
@@ -344,6 +418,7 @@ function App() {
                 </div>
               </aside>
             </div>
+            {authError && <p className="auth-error" role="alert">{authError}</p>}
           </>
         )}
         <footer className="site-footer">

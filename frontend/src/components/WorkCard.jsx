@@ -41,7 +41,9 @@ function WorkCard({ work }) {
             <p className="work-author">by {work.original_author}</p>
           )}
         </div>
-        <span className="work-format-mark" aria-hidden="true">EPUB</span>
+        <span className="work-format-mark" aria-hidden="true">
+          {work.files[0]?.file_format || "BOOK"}
+        </span>
       </div>
       {work.description && (
         <p className="work-description">{formatDescription(work.description)}</p>
@@ -85,17 +87,19 @@ function WorkCard({ work }) {
                 <strong>{file.file_format}</strong>
                 <span className="file-size">{formatFileSize(file.file_size)}</span>
               </span>
-              <a
-                className="download-link"
-                href={`/api/works/${work.id}/download`}
-                aria-label={
-                  file.original_filename.toLowerCase().endsWith(".pdf")
-                    ? `Download EPUB converted from ${file.original_filename}`
-                    : `Download ${file.original_filename}`
-                }
-              >
-                Download {file.file_format}
-              </a>
+              {file.storage_provider === "legacy_server" ? (
+                <a
+                  className="download-link"
+                  href={`/api/works/${work.id}/download`}
+                  aria-label={`Download ${file.original_filename}`}
+                >
+                  Download {file.file_format}
+                </a>
+              ) : (
+                <span className="file-size">
+                  On your computer: {file.original_filename}
+                </span>
+              )}
             </li>
           ))}
         </ul>

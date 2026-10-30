@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.config import UPLOAD_STORAGE_DIR
 from app.database import get_db
+from app.api.auth import CurrentUser
 from app.models import Work, WorkFile
 
 router = APIRouter(prefix="/api/works", tags=["downloads"])
@@ -15,9 +16,12 @@ router = APIRouter(prefix="/api/works", tags=["downloads"])
 @router.get("/{work_id}/download")
 def download_work(
     work_id: int,
+    user: CurrentUser,
     db: Session = Depends(get_db),
 ) -> FileResponse:
-    work = db.get(Work, work_id)
+    work = db.scalar(
+        select(Work).where(Work.id == work_id, Work.user_id == user.id)
+    )
     if work is None:
         raise HTTPException(status_code=404, detail="Work not found")
 
@@ -28,6 +32,11 @@ def download_work(
     )
     if work_file is None:
         raise HTTPException(status_code=404, detail="No downloadable file found")
+    if work_file.storage_provider != "legacy_server" or not work_file.storage_filename:
+        raise HTTPException(
+            status_code=404,
+            detail="This file remains on your computer and is not stored by AYO.",
+        )
 
     storage_root = UPLOAD_STORAGE_DIR.resolve()
     stored_path = (storage_root / work_file.storage_filename).resolve()

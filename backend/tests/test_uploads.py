@@ -6,17 +6,13 @@ from zipfile import ZIP_STORED, ZipFile
 
 import pytest
 from ebooklib import ITEM_DOCUMENT, epub
-from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
-from app.main import app
 from app.models import Work, WorkFile
 from app.services import storage
-
-client = TestClient(app, raise_server_exceptions=False)
 
 
 def make_epub() -> bytes:
@@ -105,6 +101,7 @@ def upload_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterato
 
 
 def test_upload_extracts_metadata_and_preserves_original(
+    client,
     upload_directory: Path,
 ) -> None:
     epub_bytes = make_epub()
@@ -160,7 +157,10 @@ def test_upload_extracts_metadata_and_preserves_original(
             path.unlink()
 
 
-def test_upload_converts_pdf_to_downloadable_epub(upload_directory: Path) -> None:
+def test_upload_converts_pdf_to_downloadable_epub(
+    client,
+    upload_directory: Path,
+) -> None:
     response = client.post(
         "/api/works/upload",
         files={"file": ("sample.pdf", make_pdf(), "application/pdf")},
@@ -200,6 +200,7 @@ def test_upload_converts_pdf_to_downloadable_epub(upload_directory: Path) -> Non
 
 
 def test_invalid_epub_is_rejected_without_database_or_file_changes(
+    client,
     upload_directory: Path,
 ) -> None:
     response = client.post(
@@ -215,6 +216,7 @@ def test_invalid_epub_is_rejected_without_database_or_file_changes(
 
 
 def test_pdf_without_extractable_text_is_rejected(
+    client,
     upload_directory: Path,
 ) -> None:
     empty_page_pdf = make_pdf().replace(
@@ -232,6 +234,7 @@ def test_pdf_without_extractable_text_is_rejected(
 
 
 def test_database_failure_removes_stored_file_and_rolls_back_work(
+    client,
     upload_directory: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -253,6 +256,7 @@ def test_database_failure_removes_stored_file_and_rolls_back_work(
 
 
 def test_oversized_upload_is_rejected_and_staging_file_is_removed(
+    client,
     upload_directory: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
