@@ -80,7 +80,7 @@ def test_local_import_saves_metadata_without_storing_the_file(client) -> None:
             ],
             "warnings": ["Major Character Death"],
             "file": {
-                "original_filename": "The Story.epub",
+                "original_filename": "My Daughters Eccentricity Rivals No One.epub.zip",
                 "file_format": "EPUB",
                 "file_size": 1024,
                 "checksum": checksum,
@@ -103,7 +103,10 @@ def test_local_import_saves_metadata_without_storing_the_file(client) -> None:
     assert work["warnings"] == ["Major Character Death"]
     assert len(work["files"]) == 1
     file_record = work["files"][0]
-    assert file_record["original_filename"] == "The Story.epub"
+    assert (
+        file_record["original_filename"]
+        == "My Daughters Eccentricity Rivals No One.epub.zip"
+    )
     assert file_record["file_format"] == "EPUB"
     assert file_record["file_size"] == 1024
     assert file_record["checksum"] == checksum
@@ -117,6 +120,40 @@ def test_local_import_saves_metadata_without_storing_the_file(client) -> None:
 
     download = client.get(f"/api/works/{work['id']}/download")
     assert download.status_code == 404
+
+
+def test_canonical_epub_fingerprint_prevents_duplicate_imports(client) -> None:
+    checksum = hashlib.sha256(b"canonical epub contents").hexdigest()
+    payload = {
+        "title": "Canonical EPUB",
+        "file": {
+            "original_filename": "Canonical.epub",
+            "file_format": "EPUB",
+            "file_size": 1024,
+            "checksum": checksum,
+            "fingerprint_version": 2,
+            "storage_provider": "local",
+        },
+    }
+
+    first_response = client.post("/api/works", json=payload)
+    assert first_response.status_code == 201
+    work_id = first_response.json()["id"]
+
+    second_payload = {
+        **payload,
+        "file": {**payload["file"], "original_filename": "Unpacked.epub"},
+    }
+    try:
+        second_response = client.post("/api/works", json=second_payload)
+        assert second_response.status_code == 409
+        assert second_response.json()["detail"] == "This book is already in your library."
+    finally:
+        with SessionLocal() as db:
+            test_work = db.get(Work, work_id)
+            if test_work is not None:
+                db.delete(test_work)
+                db.commit()
 
 
 def test_works_search_matches_title_and_author_case_insensitively(client) -> None:

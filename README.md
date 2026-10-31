@@ -44,9 +44,20 @@ replacement for a user's own backups.
 ## Current prototype status
 
 Accounts, private work/tag ownership, and browser-side metadata import are
-implemented. File relinking, collections, favorites, and duplicate detection
-are not. Saving an import stores metadata and a SHA-256 fingerprint only; the
-selected file is not sent to the backend.
+implemented. EPUB imports support standard archives, archives under a common
+enclosing directory, EPUB files nested in ZIP archives, and unpacked EPUB
+folders (using Chrome's directory picker). Metadata discovery indexes ZIP
+entries and follows `META-INF/container.xml` to the OPF without reading chapter
+files; a unique valid OPF is a controlled fallback when the container is
+missing. Missing or misplaced `mimetype` entries produce a structural warning
+instead of blocking otherwise valid metadata extraction. Nested archive
+inspection is bounded by entry-count, expanded-size, and nesting-depth limits.
+Fingerprinting remains separate and uses the existing version 2 canonical
+uncompressed-content algorithm. Duplicate detection uses those fingerprints
+within each user's library.
+File relinking, collections, and favorites are not implemented. Saving an
+import stores metadata and a SHA-256 fingerprint only; the selected file is
+not sent to the backend.
 
 ## Copyright & Content Disclaimer
 
@@ -168,8 +179,9 @@ publication date, identifier, cover, subject-derived fandom/character/
 relationship/additional tags, rating, category, and archive warnings. PDF
 fields include title, author, subject, creator, producer, creation date, and
 modification date. Missing values are returned as `null`; metadata extraction
-does not assume every file is complete. Input is limited to 100 MiB, EPUB
-metadata entries to 2 MiB, cover art to 5 MiB, and archives to 10,000 entries.
+does not assume every file is complete. Input and total nested expanded size
+are limited to 100 MiB, EPUB metadata entries to 2 MiB, cover art to 5 MiB,
+and each archive to 10,000 entries.
 
 Run the frontend metadata tests and production build from `frontend/`:
 
@@ -189,6 +201,12 @@ From `Archive_of_your_own/backend`, with the virtual environment activated:
 ```bash
 alembic upgrade head
 ```
+
+The latest migration adds a fingerprint version to imported files. Apply
+migrations to the deployed PostgreSQL database before deploying backend code
+that reads or writes that field; Render's start command does not run migrations.
+EPUB imports use version 2 fingerprints computed locally from normalized paths
+and uncompressed contents, while existing fingerprints remain version 1.
 
 Create an account or sign in through the frontend. The backend sets an
 HttpOnly session cookie and a separate CSRF cookie; the session
