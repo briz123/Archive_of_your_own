@@ -46,9 +46,6 @@ export function validateFile(file) {
   if (!file || typeof file.arrayBuffer !== "function" || typeof file.name !== "string") {
     throw new MetadataExtractionError("Choose an EPUB or PDF file.");
   }
-  if (!file.name.toLowerCase().endsWith(".epub") && !file.name.toLowerCase().endsWith(".pdf")) {
-    throw new MetadataExtractionError("Only EPUB and PDF files are supported.");
-  }
   if (file.size === 0) {
     throw new MetadataExtractionError("The selected file is empty.");
   }

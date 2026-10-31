@@ -232,9 +232,6 @@ function parseCoverReference(document) {
 
 export async function extractEpubMetadata(file) {
   validateFile(file);
-  if (!file.name.toLowerCase().endsWith(".epub")) {
-    throw new MetadataExtractionError("The selected file is not an EPUB.");
-  }
 
   let fileBytes;
   try {

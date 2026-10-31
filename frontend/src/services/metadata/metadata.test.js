@@ -142,6 +142,25 @@ describe("EPUB metadata extraction", () => {
     expect(result.fileName).toBe("UPPERCASE.EPUB");
   });
 
+  it("detects EPUB content when the selected filename has no extension", async () => {
+    const result = await extractMetadata(
+      makeFile("4DEE880C2-7B71-4AD4-90C9", makeEpub({ cover: false }), ""),
+    );
+
+    expect(result.format).toBe("EPUB");
+    expect(result.fileName).toBe("4DEE880C2-7B71-4AD4-90C9");
+    expect(result.title).toBe("The Sample Story");
+  });
+
+  it("uses EPUB content rather than rejecting an unfamiliar extension or MIME type", async () => {
+    const result = await extractMetadata(
+      makeFile("downloaded-book.bin", makeEpub({ cover: false }), "application/octet-stream"),
+    );
+
+    expect(result.format).toBe("EPUB");
+    expect(result.title).toBe("The Sample Story");
+  });
+
   it("supports EPUB 3 cover-image properties", async () => {
     const zip = {
       mimetype: encode("application/epub+zip"),
@@ -176,6 +195,11 @@ describe("EPUB metadata extraction", () => {
     ).rejects.toThrow("not a valid EPUB archive");
     await expect(
       extractMetadata(makeFile("book.txt", encode("text"), "text/plain")),
+    ).rejects.toThrow("Only EPUB and PDF files are supported");
+    await expect(
+      extractMetadata(
+        makeFile("not-an-epub", encode("not a ZIP archive"), "application/epub+zip"),
+      ),
     ).rejects.toThrow("Only EPUB and PDF files are supported");
   });
 
