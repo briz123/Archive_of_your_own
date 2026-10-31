@@ -7,13 +7,17 @@ import {
 } from "../services/metadata/index.js";
 
 function UploadForm({ onSaved }) {
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]);
+  const [fileIndex, setFileIndex] = useState(0);
   const [metadata, setMetadata] = useState(null);
   const [extracting, setExtracting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [completedCount, setCompletedCount] = useState(0);
+  const [batchTotal, setBatchTotal] = useState(0);
   const [error, setError] = useState("");
   const inputRef = useRef(null);
+  const file = files[fileIndex] ?? null;
   const [coverPreviewUrl, setCoverPreviewUrl] = useState("");
   const directorySelectionSupported =
     typeof window !== "undefined" &&
@@ -53,20 +57,26 @@ function UploadForm({ onSaved }) {
   }
 
   function handleFileChange(event) {
-    const selectedFile = event.currentTarget.files?.[0] ?? null;
+    const selectedFiles = Array.from(event.currentTarget.files ?? []);
     event.currentTarget.value = "";
-    setFile(selectedFile);
+    setFiles(selectedFiles);
+    setFileIndex(0);
     setMetadata(null);
     setSaved(false);
+    setCompletedCount(0);
+    setBatchTotal(selectedFiles.length);
     setError("");
   }
 
   async function handleDirectorySelection() {
     try {
       const directory = await window.showDirectoryPicker({ mode: "read" });
-      setFile(directory);
+      setFiles([directory]);
+      setFileIndex(0);
       setMetadata(null);
       setSaved(false);
+      setCompletedCount(0);
+      setBatchTotal(1);
       setError("");
     } catch (selectionError) {
       if (selectionError.name !== "AbortError") {
@@ -111,11 +121,13 @@ function UploadForm({ onSaved }) {
         are saved; the original is not sent to AYO.
       </p>
       <form className="upload-form" onSubmit={handleSubmit}>
-        <label htmlFor="work-upload">Choose an EPUB or PDF file</label>
+        <label htmlFor="work-upload">Choose one or more EPUB or PDF files</label>
         <input
           ref={inputRef}
           id="work-upload"
           type="file"
+          accept=".epub,.pdf,application/epub+zip,application/pdf"
+          multiple
           onChange={handleFileChange}
           disabled={extracting || saving}
         />
@@ -137,7 +149,16 @@ function UploadForm({ onSaved }) {
           <p className="selected-file">
             {file.kind === "directory"
               ? `Selected folder: ${file.name}`
-              : `Selected file: ${file.name}`}
+              : files.length > 1
+                ? `File ${fileIndex + 1} of ${files.length}: ${file.name}`
+                : `Selected file: ${file.name}`}
+          </p>
+        )}
+        {batchTotal > 1 && completedCount > 0 && (
+          <p className="upload-success" role="status">
+            {completedCount === batchTotal
+              ? `Imported all ${batchTotal} selected files.`
+              : `Imported ${completedCount} of ${batchTotal} selected files.`}
           </p>
         )}
         <button type="submit" disabled={!file || extracting || saving}>
@@ -222,10 +243,19 @@ function UploadForm({ onSaved }) {
                       storage_provider: "local",
                     },
                   });
-                  setSaved(true);
-                  setFile(null);
-                  if (inputRef.current) {
-                    inputRef.current.value = "";
+                  const nextCompletedCount = completedCount + 1;
+                  const hasNextFile = fileIndex + 1 < files.length;
+                  setCompletedCount(nextCompletedCount);
+                  setSaved(!hasNextFile);
+                  if (hasNextFile) {
+                    setFileIndex((currentIndex) => currentIndex + 1);
+                    setMetadata(null);
+                  } else {
+                    setFiles([]);
+                    setFileIndex(0);
+                    if (inputRef.current) {
+                      inputRef.current.value = "";
+                    }
                   }
                   onSaved?.();
                 } catch (saveError) {

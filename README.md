@@ -303,6 +303,12 @@ Pages workflow. Render is configured to trust
 `https://briz123.github.io`; cookies are configured for HTTPS cross-site
 requests.
 
+If sign-in reports an HTTP 404 while checking your status, verify that
+`VITE_API_BASE_URL` is the backend's origin only (not the Pages URL and not an
+origin with `/api` appended), then redeploy the Pages site. The backend health
+check should respond at `<backend-origin>/api/health`. A signed-out session
+check at `<backend-origin>/api/auth/me` should return HTTP 401, not 404.
+
 Important: the Pages site and a Render `onrender.com` service are different
 sites. Browsers that block third-party cookies may prevent cookie-based login
 even with `SameSite=None`. For reliable authentication across browsers, use a
