@@ -117,7 +117,6 @@ def test_local_import_saves_metadata_without_storing_the_file(client) -> None:
 
     download = client.get(f"/api/works/{work['id']}/download")
     assert download.status_code == 404
-    assert "not stored by AYO" in download.json()["detail"]
 
 
 def test_works_search_matches_title_and_author_case_insensitively(client) -> None:

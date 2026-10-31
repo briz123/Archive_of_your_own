@@ -166,13 +166,48 @@ def test_authenticated_write_routes_reject_invalid_csrf_tokens(
     client: TestClient,
 ) -> None:
     response = client.post(
-        "/api/works/upload",
-        files={"file": ("sample.epub", b"not an epub", "application/epub+zip")},
+        "/api/works",
+        json={
+            "title": "CSRF test work",
+            "file": {
+                "original_filename": "csrf-test.epub",
+                "file_format": "EPUB",
+                "file_size": 1,
+                "checksum": hashlib.sha256(b"x").hexdigest(),
+                "storage_provider": "local",
+            },
+        },
         headers={"X-CSRF-Token": "invalid"},
     )
 
     assert response.status_code == 403
     assert response.json()["detail"].startswith("CSRF validation failed")
+
+
+def test_csrf_endpoint_returns_cookie_token_for_cross_origin_frontend(
+    client: TestClient,
+) -> None:
+    response = client.get(
+        "/api/auth/csrf",
+        headers={"Origin": "http://localhost:5173"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["csrf_token"] == client.cookies.get("ayo_csrf")
+    assert response.headers["cache-control"] == "no-store"
+    assert (
+        response.headers["access-control-allow-origin"] == "http://localhost:5173"
+    )
+    assert response.headers["access-control-allow-credentials"] == "true"
+
+
+def test_csrf_endpoint_rejects_untrusted_origin(client: TestClient) -> None:
+    response = client.get(
+        "/api/auth/csrf",
+        headers={"Origin": "https://untrusted.example"},
+    )
+
+    assert response.status_code == 403
 
 
 def test_work_endpoints_only_return_records_owned_by_signed_in_user(
@@ -198,10 +233,6 @@ def test_work_endpoints_only_return_records_owned_by_signed_in_user(
                     "X-CSRF-Token": anonymous_client.cookies.get("ayo_csrf")
                 },
             ).status_code
-            == 404
-        )
-        assert (
-            anonymous_client.get(f"/api/works/{work_id}/download").status_code
             == 404
         )
         with SessionLocal() as db:
