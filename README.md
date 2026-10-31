@@ -171,8 +171,9 @@ The reusable extractor is in `frontend/src/services/metadata/`. It returns
 the same nullable metadata shape for EPUB and PDF files. EPUB parsing uses
 `fflate` to read only the package metadata and optional cover image from the
 archive; PDF properties are read using Mozilla PDF.js. Both operate on the
-selected file bytes in the browser. The import form previews the fields and
-tags, then posts only metadata and a locally computed SHA-256 fingerprint.
+selected file bytes in the browser. Multiple EPUB and PDF files can be selected
+together; each file is processed and reviewed in sequence before its metadata
+and locally computed SHA-256 fingerprint are saved.
 
 Supported EPUB fields include title, author, description, language, publisher,
 publication date, identifier, cover, subject-derived fandom/character/
@@ -302,6 +303,12 @@ After Render creates the service, set it to the full service origin, such as
 Pages workflow. Render is configured to trust
 `https://briz123.github.io`; cookies are configured for HTTPS cross-site
 requests.
+
+If sign-in reports an HTTP 404 while checking your status, verify that
+`VITE_API_BASE_URL` is the backend's origin only (not the Pages URL and not an
+origin with `/api` appended), then redeploy the Pages site. The backend health
+check should respond at `<backend-origin>/api/health`. A signed-out session
+check at `<backend-origin>/api/auth/me` should return HTTP 401, not 404.
 
 Important: the Pages site and a Render `onrender.com` service are different
 sites. Browsers that block third-party cookies may prevent cookie-based login

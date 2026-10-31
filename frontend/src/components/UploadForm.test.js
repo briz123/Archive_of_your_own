@@ -47,10 +47,10 @@ function makeFile(name) {
   return file;
 }
 
-async function selectFile(input, file) {
+async function selectFile(input, files) {
   Object.defineProperty(input, "files", {
     configurable: true,
-    value: [file],
+    value: Array.isArray(files) ? files : [files],
   });
   await act(async () => {
     input.dispatchEvent(new Event("change", { bubbles: true }));
@@ -212,5 +212,74 @@ describe("UploadForm file selection", () => {
     });
     expect(extractMetadata).toHaveBeenNthCalledWith(3, thirdFile);
     expect(saveWork).toHaveBeenCalledTimes(2);
+  });
+
+  it("extracts and saves multiple selected files in sequence", async () => {
+    const firstFile = makeFile("first.epub");
+    const secondFile = makeFile("second.pdf");
+    extractMetadata.mockImplementation(async (file) => ({
+      format: file.name.endsWith(".pdf") ? "PDF" : "EPUB",
+      fileName: file.name,
+      title: file.name,
+      author: null,
+      description: null,
+      language: null,
+      publisher: null,
+      publicationDate: null,
+      identifier: null,
+      subject: null,
+      creator: null,
+      producer: null,
+      creationDate: null,
+      modificationDate: null,
+      rating: null,
+      category: null,
+      archiveWarnings: [],
+      tags: [],
+      coverImage: null,
+    }));
+    calculateFingerprint.mockResolvedValue({
+      fileSize: 9,
+      fingerprintVersion: 1,
+      checksum: "c".repeat(64),
+    });
+    saveWork.mockResolvedValue({});
+
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => root.render(createElement(UploadForm)));
+
+    const input = container.querySelector('input[type="file"]');
+    expect(input.multiple).toBe(true);
+    await selectFile(input, [firstFile, secondFile]);
+    expect(container.textContent).toContain("File 1 of 2: first.epub");
+
+    await act(async () => {
+      container.querySelector('button[type="submit"]').click();
+    });
+    expect(extractMetadata).toHaveBeenNthCalledWith(1, firstFile);
+    await act(async () => {
+      [...container.querySelectorAll("button")]
+        .find((button) => button.textContent.includes("Add to my library"))
+        .click();
+    });
+
+    expect(saveWork).toHaveBeenCalledOnce();
+    expect(container.textContent).toContain("Imported 1 of 2 selected files.");
+    expect(container.textContent).toContain("File 2 of 2: second.pdf");
+    await act(async () => {
+      container.querySelector('button[type="submit"]').click();
+    });
+    expect(extractMetadata).toHaveBeenNthCalledWith(2, secondFile);
+    await act(async () => {
+      [...container.querySelectorAll("button")]
+        .find((button) => button.textContent.includes("Add to my library"))
+        .click();
+    });
+
+    expect(saveWork).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain("Imported all 2 selected files.");
+    expect(container.textContent).toContain("second.pdf was added to your library.");
   });
 });
