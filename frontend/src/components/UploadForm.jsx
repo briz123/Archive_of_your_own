@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 
 import { saveWork } from "../services/api.js";
-import { extractMetadata } from "../services/metadata/index.js";
+import {
+  calculateFingerprint,
+  extractMetadata,
+} from "../services/metadata/index.js";
 
 function UploadForm({ onSaved }) {
   const [file, setFile] = useState(null);
@@ -12,6 +15,9 @@ function UploadForm({ onSaved }) {
   const [error, setError] = useState("");
   const inputRef = useRef(null);
   const [coverPreviewUrl, setCoverPreviewUrl] = useState("");
+  const directorySelectionSupported =
+    typeof window !== "undefined" &&
+    typeof window.showDirectoryPicker === "function";
 
   useEffect(() => {
     if (!metadata?.coverImage) {
@@ -46,6 +52,31 @@ function UploadForm({ onSaved }) {
     }
   }
 
+  function handleFileChange(event) {
+    const selectedFile = event.currentTarget.files?.[0] ?? null;
+    event.currentTarget.value = "";
+    setFile(selectedFile);
+    setMetadata(null);
+    setSaved(false);
+    setError("");
+  }
+
+  async function handleDirectorySelection() {
+    try {
+      const directory = await window.showDirectoryPicker({ mode: "read" });
+      setFile(directory);
+      setMetadata(null);
+      setSaved(false);
+      setError("");
+    } catch (selectionError) {
+      if (selectionError.name !== "AbortError") {
+        setError(
+          "The folder could not be selected. Try Chrome, or choose a standard EPUB file.",
+        );
+      }
+    }
+  }
+
   const metadataFields = metadata
     ? [
         ["Author", metadata.author],
@@ -62,13 +93,19 @@ function UploadForm({ onSaved }) {
         ["Rating", metadata.rating],
         ["Category", metadata.category],
         ["Archive warnings", metadata.archiveWarnings.join(", ") || null],
+        [
+          "EPUB structure",
+          metadata.validationWarnings?.join(" ") || null,
+        ],
       ].filter(([, value]) => value)
     : [];
 
   return (
     <section className="upload-section" aria-labelledby="upload-heading">
-      <h2 id="upload-heading">Inspect a file</h2>
-      <p>Choose an EPUB or PDF to extract its available metadata in your browser.</p>
+      <h2 id="upload-heading">Import a book</h2>
+      <p>
+        Choose an EPUB or PDF file, or select an EPUB folder. Metadata is processed in your browser.
+      </p>
       <p className="prototype-notice">
         The file is read locally. Only its extracted metadata and fingerprint
         are saved; the original is not sent to AYO.
@@ -79,15 +116,30 @@ function UploadForm({ onSaved }) {
           ref={inputRef}
           id="work-upload"
           type="file"
-          accept=".epub,.pdf,application/epub+zip,application/pdf"
-          onChange={(event) => {
-            setFile(event.target.files?.[0] || null);
-            setMetadata(null);
-            setSaved(false);
-            setError("");
-          }}
+          onChange={handleFileChange}
           disabled={extracting || saving}
         />
+        {directorySelectionSupported ? (
+          <button
+            type="button"
+            onClick={handleDirectorySelection}
+            disabled={extracting || saving}
+          >
+            Choose an EPUB folder
+          </button>
+        ) : (
+          <p>
+            Unpacked EPUB folders can be selected in Chrome. Safari supports
+            standard EPUB files.
+          </p>
+        )}
+        {file && (
+          <p className="selected-file">
+            {file.kind === "directory"
+              ? `Selected folder: ${file.name}`
+              : `Selected file: ${file.name}`}
+          </p>
+        )}
         <button type="submit" disabled={!file || extracting || saving}>
           {extracting ? "Reading metadata..." : "Extract metadata"}
         </button>
@@ -137,20 +189,12 @@ function UploadForm({ onSaved }) {
                 setSaving(true);
                 setError("");
                 try {
-                  if (!globalThis.crypto?.subtle) {
-                    throw new Error(
-                      "This browser cannot calculate a file fingerprint. Use a secure browser connection and try again.",
-                    );
-                  }
-                  const digest = await globalThis.crypto.subtle.digest(
-                    "SHA-256",
-                    await file.arrayBuffer(),
+                  const fingerprint = await calculateFingerprint(
+                    file,
+                    metadata.format,
                   );
-                  const checksum = Array.from(new Uint8Array(digest), (byte) =>
-                    byte.toString(16).padStart(2, "0"),
-                  ).join("");
                   await saveWork({
-                    title: metadata.title || file.name.replace(/\.(epub|pdf)$/i, ""),
+                    title: metadata.title || metadata.fileName.replace(/\.(epub|pdf)$/i, ""),
                     original_author: metadata.author,
                     description: metadata.description,
                     language: metadata.language,
@@ -170,10 +214,11 @@ function UploadForm({ onSaved }) {
                     })),
                     warnings: metadata.archiveWarnings,
                     file: {
-                      original_filename: file.name,
+                      original_filename: metadata.fileName,
                       file_format: metadata.format,
-                      file_size: file.size,
-                      checksum,
+                      file_size: fingerprint.fileSize,
+                      checksum: fingerprint.checksum,
+                      fingerprint_version: fingerprint.fingerprintVersion,
                       storage_provider: "local",
                     },
                   });

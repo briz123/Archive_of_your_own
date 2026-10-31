@@ -29,6 +29,7 @@ export function createMetadata(format, fileName) {
     rating: null,
     category: null,
     archiveWarnings: [],
+    validationWarnings: [],
     tags: [],
     coverImage: null,
   };

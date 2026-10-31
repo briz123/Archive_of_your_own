@@ -3,6 +3,7 @@ import { unzip } from "fflate";
 import {
   MAX_ARCHIVE_ENTRIES,
   MAX_COVER_IMAGE_SIZE_BYTES,
+  MAX_IMPORT_FILE_SIZE_BYTES,
   MAX_METADATA_ENTRY_SIZE_BYTES,
   MetadataExtractionError,
   createMetadata,
@@ -10,6 +11,8 @@ import {
   validateFile,
 } from "./types.js";
 
+const MAX_DIRECTORY_FILES = 10_000;
+const MAX_NESTED_ARCHIVE_DEPTH = 2;
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
 const ratingValues = new Map([
@@ -84,7 +87,17 @@ function findAttribute(element, attributeName) {
   return element.getAttribute(attributeName) || null;
 }
 
+function normalizeArchivePath(path) {
+  return path
+    .replace(/\\/g, "/")
+    .replace(/^(?:\.\/|\/)+/, "")
+    .toLowerCase();
+}
+
 function readZipEntries(bytes, requestedPaths, maxEntrySize, allowOversized = false) {
+  const normalizedRequestedPaths = new Set(
+    [...requestedPaths].map(normalizeArchivePath),
+  );
   let entryCount = 0;
   let invalidSize = false;
   let tooManyEntries = false;
@@ -100,7 +113,7 @@ function readZipEntries(bytes, requestedPaths, maxEntrySize, allowOversized = fa
               tooManyEntries = true;
               return false;
             }
-            if (!requestedPaths.has(entry.name)) {
+            if (!normalizedRequestedPaths.has(normalizeArchivePath(entry.name))) {
               return false;
             }
             if (
@@ -126,7 +139,14 @@ function readZipEntries(bytes, requestedPaths, maxEntrySize, allowOversized = fa
               ),
             );
           } else {
-            resolve(entries);
+            resolve(
+              Object.fromEntries(
+                Object.entries(entries).map(([name, data]) => [
+                  normalizeArchivePath(name),
+                  data,
+                ]),
+              ),
+            );
           }
         },
       );
@@ -134,6 +154,571 @@ function readZipEntries(bytes, requestedPaths, maxEntrySize, allowOversized = fa
       reject(new MetadataExtractionError("The selected file is not a valid EPUB."));
     }
   });
+}
+
+function readAllZipEntries(bytes) {
+  let entryCount = 0;
+  let totalSize = 0;
+  let invalidSize = false;
+  let tooManyEntries = false;
+
+  return new Promise((resolve, reject) => {
+    try {
+      unzip(
+        bytes,
+        {
+          filter(entry) {
+            entryCount += 1;
+            if (entryCount > MAX_ARCHIVE_ENTRIES) {
+              tooManyEntries = true;
+              return false;
+            }
+            if (entry.name.endsWith("/")) return false;
+            if (
+              !Number.isSafeInteger(entry.originalSize) ||
+              entry.originalSize < 0 ||
+              totalSize + entry.originalSize > MAX_IMPORT_FILE_SIZE_BYTES
+            ) {
+              invalidSize = true;
+              return false;
+            }
+            totalSize += entry.originalSize;
+            return true;
+          },
+        },
+        (error, files) => {
+          if (error) {
+            reject(new MetadataExtractionError("The EPUB archive is damaged."));
+          } else if (tooManyEntries) {
+            reject(new MetadataExtractionError("The EPUB archive has too many entries."));
+          } else if (invalidSize) {
+            reject(new MetadataExtractionError("The EPUB contents exceed the 100 MiB limit."));
+          } else {
+            resolve(
+              new Map(
+                Object.entries(files).map(([name, data]) => [
+                  normalizeArchivePath(name),
+                  data,
+                ]),
+              ),
+            );
+          }
+        },
+      );
+    } catch (error) {
+      reject(new MetadataExtractionError("The selected file is not a valid EPUB."));
+    }
+  });
+}
+
+function listZipEntries(bytes, budget) {
+  const entries = new Map();
+  let entryCount = 0;
+  let totalSize = 0;
+  let invalidSize = false;
+  let tooManyEntries = false;
+  let duplicatePath = false;
+
+  return new Promise((resolve, reject) => {
+    try {
+      unzip(
+        bytes,
+        {
+          filter(entry) {
+            entryCount += 1;
+            if (entryCount > MAX_ARCHIVE_ENTRIES) {
+              tooManyEntries = true;
+              return false;
+            }
+            if (entry.name.endsWith("/")) {
+              return false;
+            }
+            if (
+              !Number.isSafeInteger(entry.originalSize) ||
+              entry.originalSize < 0 ||
+              totalSize + entry.originalSize > budget.remaining
+            ) {
+              invalidSize = true;
+              return false;
+            }
+            const path = normalizeArchivePath(entry.name);
+            if (!path || entries.has(path)) {
+              duplicatePath = true;
+              return false;
+            }
+            totalSize += entry.originalSize;
+            entries.set(path, { name: entry.name, size: entry.originalSize });
+            return false;
+          },
+        },
+        (error) => {
+          if (error) {
+            reject(new MetadataExtractionError("The EPUB archive is damaged."));
+          } else if (tooManyEntries) {
+            reject(new MetadataExtractionError("The EPUB archive has too many entries."));
+          } else if (invalidSize) {
+            reject(
+              new MetadataExtractionError(
+                "The EPUB contents exceed the 100 MiB expanded-size limit.",
+              ),
+            );
+          } else if (duplicatePath) {
+            reject(
+              new MetadataExtractionError(
+                "The EPUB archive contains duplicate or invalid file paths.",
+              ),
+            );
+          } else {
+            budget.remaining -= totalSize;
+            resolve(entries);
+          }
+        },
+      );
+    } catch {
+      reject(new MetadataExtractionError("The selected file is not a valid EPUB."));
+    }
+  });
+}
+
+function isDirectoryHandle(source) {
+  return (
+    source?.kind === "directory" &&
+    typeof source.getDirectoryHandle === "function" &&
+    typeof source.getFileHandle === "function"
+  );
+}
+
+async function indexDirectory(handle) {
+  const entries = new Map();
+
+  async function visit(directory, prefix = "") {
+    let children;
+    try {
+      children = directory.values();
+      for await (const child of children) {
+        const path = prefix ? `${prefix}/${child.name}` : child.name;
+        if (child.kind === "directory") {
+          await visit(child, path);
+          continue;
+        }
+        if (child.kind !== "file") {
+          continue;
+        }
+        const normalizedPath = normalizeArchivePath(path);
+        if (entries.has(normalizedPath)) {
+          throw new MetadataExtractionError(
+            "The EPUB folder contains duplicate file paths.",
+          );
+        }
+        entries.set(normalizedPath, child);
+        if (entries.size > MAX_DIRECTORY_FILES) {
+          throw new MetadataExtractionError(
+            "The selected EPUB folder contains too many files.",
+          );
+        }
+      }
+    } catch (error) {
+      if (error instanceof MetadataExtractionError) {
+        throw error;
+      }
+      throw new MetadataExtractionError(
+        "Could not access the selected folder. Select the unpacked EPUB folder and allow read access.",
+      );
+    }
+  }
+
+  await visit(handle);
+  if (entries.size === 0) {
+    throw new MetadataExtractionError("The selected EPUB folder is empty.");
+  }
+  return entries;
+}
+
+async function readDirectoryFile(fileHandle, path, maxSize, allowOversized = false) {
+  let file;
+  try {
+    file = await fileHandle.getFile();
+  } catch {
+    throw new MetadataExtractionError(
+      `Could not access "${path}". The file may have moved or is no longer available.`,
+    );
+  }
+  if (!Number.isSafeInteger(file.size) || file.size < 0) {
+    throw new MetadataExtractionError(`"${path}" has an invalid file size.`);
+  }
+  if (file.size > maxSize) {
+    if (allowOversized) {
+      return null;
+    }
+    throw new MetadataExtractionError(
+      "The EPUB metadata file exceeds the allowed size.",
+    );
+  }
+  try {
+    return new Uint8Array(await file.arrayBuffer());
+  } catch {
+    throw new MetadataExtractionError(
+      `Could not read "${path}". The file may be unavailable or still downloading.`,
+    );
+  }
+}
+
+async function createEpubSource(
+  source,
+  budget = { remaining: MAX_IMPORT_FILE_SIZE_BYTES },
+  nestingDepth = 0,
+) {
+  if (isDirectoryHandle(source)) {
+    const entries = await indexDirectory(source);
+    return {
+      name: source.name,
+      entryPaths: [...entries.keys()],
+      async read(path, maxSize, allowOversized = false) {
+        const normalizedPath = normalizeArchivePath(path);
+        const fileHandle = entries.get(normalizedPath);
+        return fileHandle
+          ? readDirectoryFile(fileHandle, path, maxSize, allowOversized)
+          : null;
+      },
+      async readAllEntries() {
+        const contentEntries = new Map();
+        let totalSize = 0;
+        for (const [path, fileHandle] of entries) {
+          const file = await readDirectoryFile(
+            fileHandle,
+            path,
+            MAX_IMPORT_FILE_SIZE_BYTES,
+          );
+          totalSize += file.length;
+          if (totalSize > MAX_IMPORT_FILE_SIZE_BYTES) {
+            throw new MetadataExtractionError(
+              "The EPUB contents exceed the 100 MiB limit.",
+            );
+          }
+          contentEntries.set(path, file);
+        }
+        return { entries: contentEntries, fileSize: totalSize };
+      },
+      async openNested(path) {
+        if (nestingDepth >= MAX_NESTED_ARCHIVE_DEPTH) {
+          throw new MetadataExtractionError(
+            "The EPUB is nested too deeply to inspect safely.",
+          );
+        }
+        const bytes = await this.read(
+          path,
+          Math.min(MAX_IMPORT_FILE_SIZE_BYTES, budget.remaining),
+        );
+        if (!bytes) {
+          throw new MetadataExtractionError("The nested EPUB archive is missing.");
+        }
+        return createZipEpubSource(
+          path,
+          bytes,
+          budget,
+          nestingDepth + 1,
+        );
+      },
+    };
+  }
+
+  validateFile(source);
+  let archiveBytes;
+  try {
+    archiveBytes = new Uint8Array(await source.arrayBuffer());
+  } catch {
+    throw new MetadataExtractionError("Could not read the selected EPUB file.");
+  }
+  if (
+    archiveBytes.length < 4 ||
+    archiveBytes[0] !== 0x50 ||
+    archiveBytes[1] !== 0x4b
+  ) {
+    throw new MetadataExtractionError("The selected file is not a valid EPUB archive.");
+  }
+  return createZipEpubSource(source.name, archiveBytes, budget, nestingDepth);
+}
+
+async function createZipEpubSource(name, archiveBytes, budget, nestingDepth) {
+  if (
+    archiveBytes.length < 4 ||
+    archiveBytes[0] !== 0x50 ||
+    archiveBytes[1] !== 0x4b
+  ) {
+    throw new MetadataExtractionError("The nested file is not a valid EPUB archive.");
+  }
+  const entries = await listZipEntries(archiveBytes, budget);
+  const source = {
+    name,
+    entryPaths: [...entries.keys()],
+    async read(path, maxSize, allowOversized = false) {
+      const entry = entries.get(normalizeArchivePath(path));
+      if (!entry) {
+        return null;
+      }
+      if (entry.size > maxSize) {
+        if (allowOversized) {
+          return null;
+        }
+        throw new MetadataExtractionError(
+          "The EPUB metadata file exceeds the allowed size.",
+        );
+      }
+      const extracted = await readZipEntries(
+        archiveBytes,
+        new Set([entry.name]),
+        maxSize,
+        allowOversized,
+      );
+      return extracted[normalizeArchivePath(entry.name)] ?? null;
+    },
+    async readAllEntries() {
+      return {
+        entries: await readAllZipEntries(archiveBytes),
+        fileSize: archiveBytes.length,
+      };
+    },
+    async openNested(path) {
+      if (nestingDepth >= MAX_NESTED_ARCHIVE_DEPTH) {
+        throw new MetadataExtractionError(
+          "The EPUB is nested too deeply to inspect safely.",
+        );
+      }
+      const bytes = await this.read(
+        path,
+        Math.min(MAX_IMPORT_FILE_SIZE_BYTES, budget.remaining),
+      );
+      if (!bytes) {
+        throw new MetadataExtractionError("The nested EPUB archive is missing.");
+      }
+      return createZipEpubSource(
+        path,
+        bytes,
+        budget,
+        nestingDepth + 1,
+      );
+    },
+  };
+  return source;
+}
+
+async function createEpubFingerprintSource(file) {
+  if (isDirectoryHandle(file)) {
+    return createEpubSource(file);
+  }
+  validateFile(file);
+  let archiveBytes;
+  try {
+    archiveBytes = new Uint8Array(await file.arrayBuffer());
+  } catch {
+    throw new MetadataExtractionError("Could not read the selected EPUB file.");
+  }
+  if (
+    archiveBytes.length < 4 ||
+    archiveBytes[0] !== 0x50 ||
+    archiveBytes[1] !== 0x4b
+  ) {
+    throw new MetadataExtractionError("The selected file is not a valid EPUB archive.");
+  }
+  return {
+    async readAllEntries() {
+      return {
+        entries: await readAllZipEntries(archiveBytes),
+        fileSize: file.size,
+      };
+    },
+  };
+}
+
+function findContainerPath(source) {
+  const rootContainer = source.entryPaths.find(
+    (path) => path === "meta-inf/container.xml",
+  );
+  if (rootContainer) {
+    return rootContainer;
+  }
+  return (
+    source.entryPaths
+      .filter((path) => path.endsWith("/meta-inf/container.xml"))
+      .sort((left, right) => left.split("/").length - right.split("/").length)[0] ??
+    null
+  );
+}
+
+function packageRootFromContainerPath(containerPath) {
+  return containerPath.slice(0, -"meta-inf/container.xml".length);
+}
+
+function commonEntryRoot(entryPaths) {
+  const firstSegments = entryPaths.map((path) => path.split("/", 1)[0]);
+  if (
+    firstSegments.length === 0 ||
+    !firstSegments[0] ||
+    firstSegments.some((segment) => segment !== firstSegments[0])
+  ) {
+    return "";
+  }
+  return `${firstSegments[0]}/`;
+}
+
+function validatePackageDocument(packageDocument) {
+  if (
+    packageDocument.documentElement.localName !== "package" ||
+    !descendantsByLocalName(packageDocument, "metadata").length
+  ) {
+    throw new MetadataExtractionError("The EPUB package document is incomplete.");
+  }
+}
+
+async function loadPackageDocument(source, packagePath) {
+  if (!packagePath || !packagePath.toLowerCase().endsWith(".opf")) {
+    throw new MetadataExtractionError(
+      "The EPUB container does not reference a valid OPF package document.",
+    );
+  }
+  const packageBytes = await source.read(
+    packagePath,
+    MAX_METADATA_ENTRY_SIZE_BYTES,
+  );
+  if (!packageBytes) {
+    throw new MetadataExtractionError("The EPUB package document is missing.");
+  }
+  const packageDocument = parseXml(decodeXml(packageBytes));
+  validatePackageDocument(packageDocument);
+  return packageDocument;
+}
+
+async function validateMimetype(source, packageRoot, warnings) {
+  const expectedPath = normalizeArchivePath(`${packageRoot}mimetype`);
+  const mimetypeBytes = await source.read(
+    expectedPath,
+    MAX_METADATA_ENTRY_SIZE_BYTES,
+  );
+  if (!mimetypeBytes) {
+    const misplaced = source.entryPaths.some(
+      (path) => path.endsWith("/mimetype") || path === "mimetype",
+    );
+    warnings.push(
+      misplaced
+        ? "The EPUB mimetype entry is outside the package root."
+        : "The EPUB mimetype entry is missing.",
+    );
+    return;
+  }
+  if (new TextDecoder().decode(mimetypeBytes).trim() !== "application/epub+zip") {
+    warnings.push("The EPUB mimetype entry has an unexpected value.");
+  }
+}
+
+function packagePathFromRootfile(containerDocument) {
+  const rootfiles = descendantsByLocalName(containerDocument, "rootfile");
+  const rootfile =
+    rootfiles.find(
+      (element) =>
+        findAttribute(element, "media-type") ===
+        "application/oebps-package+xml",
+    ) ?? rootfiles.find((element) => findAttribute(element, "full-path"));
+  const fullPath = rootfile && findAttribute(rootfile, "full-path");
+  return fullPath ? resolveArchivePath("", fullPath) : null;
+}
+
+async function locatePackage(source, warnings, budget, nestingDepth) {
+  const containerPath = findContainerPath(source);
+  if (containerPath) {
+    const containerBytes = await source.read(
+      containerPath,
+      MAX_METADATA_ENTRY_SIZE_BYTES,
+    );
+    if (!containerBytes) {
+      throw new MetadataExtractionError("The EPUB container document is missing.");
+    }
+    const containerDocument = parseXml(decodeXml(containerBytes));
+    const packageRelativePath = packagePathFromRootfile(containerDocument);
+    if (!packageRelativePath) {
+      throw new MetadataExtractionError(
+        "The EPUB package document could not be located.",
+      );
+    }
+    const packageRoot = packageRootFromContainerPath(containerPath);
+    const packagePath = normalizeArchivePath(
+      `${packageRoot}${packageRelativePath}`,
+    );
+    const packageDocument = await loadPackageDocument(source, packagePath);
+    await validateMimetype(source, packageRoot, warnings);
+    return { packageDocument, packagePath };
+  }
+
+  const nestedArchives = source.entryPaths.filter((path) =>
+    path.toLowerCase().endsWith(".epub"),
+  );
+  if (nestedArchives.length > 1) {
+    throw new MetadataExtractionError(
+      "The ZIP contains multiple EPUB files. Select the EPUB file directly.",
+    );
+  }
+  if (nestedArchives.length === 1) {
+    if (nestingDepth >= MAX_NESTED_ARCHIVE_DEPTH) {
+      throw new MetadataExtractionError(
+        "The EPUB is nested too deeply to inspect safely.",
+      );
+    }
+    const nestedSource = await source.openNested(nestedArchives[0]);
+    return locatePackage(nestedSource, warnings, budget, nestingDepth + 1);
+  }
+
+  const packageCandidates = source.entryPaths
+    .filter((path) => path.endsWith(".opf"))
+    .sort((left, right) => left.split("/").length - right.split("/").length);
+  if (packageCandidates.length !== 1) {
+    throw new MetadataExtractionError(
+      "The EPUB is missing its container metadata and a unique OPF package document could not be identified.",
+    );
+  }
+  const packagePath = packageCandidates[0];
+  const packageDocument = await loadPackageDocument(source, packagePath);
+  warnings.push(
+    "The EPUB container document is missing; metadata was recovered from its OPF package.",
+  );
+  await validateMimetype(source, commonEntryRoot(source.entryPaths), warnings);
+  return { packageDocument, packagePath };
+}
+
+async function fingerprintEntries(entries) {
+  if (!globalThis.crypto?.subtle) {
+    throw new MetadataExtractionError(
+      "This browser cannot calculate a file fingerprint. Use a secure browser connection and try again.",
+    );
+  }
+  const sortedEntries = [...entries.entries()].sort(([left], [right]) =>
+    left.localeCompare(right),
+  );
+  const encoder = new TextEncoder();
+  const chunks = [];
+  let totalLength = 4;
+  for (const [path, data] of sortedEntries) {
+    const pathBytes = encoder.encode(path);
+    if (pathBytes.length > 0xffffffff || data.length > 0xffffffff) {
+      throw new MetadataExtractionError("The EPUB contains an oversized file path.");
+    }
+    const header = new Uint8Array(8);
+    const headerView = new DataView(header.buffer);
+    headerView.setUint32(0, pathBytes.length);
+    headerView.setUint32(4, data.length);
+    chunks.push(header, pathBytes, data);
+    totalLength += header.length + pathBytes.length + data.length;
+  }
+
+  const canonicalBytes = new Uint8Array(totalLength);
+  new DataView(canonicalBytes.buffer).setUint32(0, sortedEntries.length);
+  let offset = 4;
+  for (const chunk of chunks) {
+    canonicalBytes.set(chunk, offset);
+    offset += chunk.length;
+  }
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", canonicalBytes);
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
 }
 
 function resolveArchivePath(baseFilePath, reference) {
@@ -231,57 +816,18 @@ function parseCoverReference(document) {
 }
 
 export async function extractEpubMetadata(file) {
-  validateFile(file);
-
-  let fileBytes;
-  try {
-    fileBytes = new Uint8Array(await file.arrayBuffer());
-  } catch (error) {
-    throw new MetadataExtractionError("Could not read the selected EPUB file.");
-  }
-  if (
-    fileBytes.length < 4 ||
-    fileBytes[0] !== 0x50 ||
-    fileBytes[1] !== 0x4b
-  ) {
-    throw new MetadataExtractionError("The selected file is not a valid EPUB archive.");
-  }
-
-  const initialEntries = await readZipEntries(
-    fileBytes,
-    new Set(["mimetype", "META-INF/container.xml"]),
-    MAX_METADATA_ENTRY_SIZE_BYTES,
+  const budget = { remaining: MAX_IMPORT_FILE_SIZE_BYTES };
+  const source = await createEpubSource(file, budget);
+  const fileName = source.name;
+  const validationWarnings = [];
+  const { packageDocument, packagePath } = await locatePackage(
+    source,
+    validationWarnings,
+    budget,
+    0,
   );
-  if (decodeXml(initialEntries.mimetype ?? new Uint8Array()).trim() !== "application/epub+zip") {
-    throw new MetadataExtractionError("The archive does not have the EPUB mimetype.");
-  }
-  const containerBytes = initialEntries["META-INF/container.xml"];
-  if (!containerBytes) {
-    throw new MetadataExtractionError("The EPUB is missing its container metadata.");
-  }
-
-  const containerDocument = parseXml(decodeXml(containerBytes));
-  const rootfile = descendantsByLocalName(containerDocument, "rootfile").find(
-    (element) => findAttribute(element, "media-type") === "application/oebps-package+xml",
-  );
-  const packagePath = rootfile && findAttribute(rootfile, "full-path");
-  const normalizedPackagePath =
-    packagePath && resolveArchivePath("", packagePath);
-  if (!normalizedPackagePath) {
-    throw new MetadataExtractionError("The EPUB package document could not be located.");
-  }
-
-  const packageEntries = await readZipEntries(
-    fileBytes,
-    new Set([normalizedPackagePath]),
-    MAX_METADATA_ENTRY_SIZE_BYTES,
-  );
-  const packageBytes = packageEntries[normalizedPackagePath];
-  if (!packageBytes) {
-    throw new MetadataExtractionError("The EPUB package document is missing.");
-  }
-  const packageDocument = parseXml(decodeXml(packageBytes));
-  const metadata = createMetadata("EPUB", file.name);
+  const metadata = createMetadata("EPUB", fileName);
+  metadata.validationWarnings = validationWarnings;
   metadata.title = firstText(packageDocument, "title");
   metadata.author = firstText(packageDocument, "creator");
   metadata.description = firstText(packageDocument, "description");
@@ -295,13 +841,11 @@ export async function extractEpubMetadata(file) {
   if (cover) {
     const coverPath = resolveArchivePath(packagePath, cover.href);
     if (coverPath) {
-      const coverEntries = await readZipEntries(
-        fileBytes,
-        new Set([coverPath]),
+      const coverData = await source.read(
+        coverPath,
         MAX_COVER_IMAGE_SIZE_BYTES,
         true,
       );
-      const coverData = coverEntries[coverPath];
       if (coverData) {
         metadata.coverImage = {
           mediaType: cover.mediaType,
@@ -312,4 +856,14 @@ export async function extractEpubMetadata(file) {
   }
 
   return metadata;
+}
+
+export async function fingerprintEpub(file) {
+  const source = await createEpubFingerprintSource(file);
+  const { entries, fileSize } = await source.readAllEntries();
+  return {
+    checksum: await fingerprintEntries(entries),
+    fileSize,
+    fingerprintVersion: 2,
+  };
 }
