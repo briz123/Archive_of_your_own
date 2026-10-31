@@ -133,6 +133,15 @@ describe("EPUB metadata extraction", () => {
     });
   });
 
+  it("accepts uppercase EPUB extensions when the browser MIME type is missing", async () => {
+    const result = await extractMetadata(
+      makeFile("UPPERCASE.EPUB", makeEpub({ cover: false }), ""),
+    );
+
+    expect(result.format).toBe("EPUB");
+    expect(result.fileName).toBe("UPPERCASE.EPUB");
+  });
+
   it("supports EPUB 3 cover-image properties", async () => {
     const zip = {
       mimetype: encode("application/epub+zip"),

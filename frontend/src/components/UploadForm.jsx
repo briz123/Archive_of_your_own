@@ -178,6 +178,10 @@ function UploadForm({ onSaved }) {
                     },
                   });
                   setSaved(true);
+                  setFile(null);
+                  if (inputRef.current) {
+                    inputRef.current.value = "";
+                  }
                   onSaved?.();
                 } catch (saveError) {
                   setError(saveError.message || "The work could not be saved.");
