@@ -1,5 +1,11 @@
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
+
+function apiUrl(path) {
+  return `${API_BASE_URL}${path}`;
+}
+
 async function fetchJson(url, label) {
-  const response = await fetch(url, { credentials: "same-origin" });
+  const response = await fetch(apiUrl(url), { credentials: "include" });
   if (!response.ok) {
     throw new Error(`Could not load ${label} (HTTP ${response.status}).`);
   }
@@ -7,21 +13,31 @@ async function fetchJson(url, label) {
   return response.json();
 }
 
-function getCsrfToken() {
-  const cookie = document.cookie
-    .split("; ")
-    .find((item) => item.startsWith("ayo_csrf="));
-  return cookie ? decodeURIComponent(cookie.slice("ayo_csrf=".length)) : "";
+async function getCsrfToken() {
+  const response = await fetch(apiUrl("/api/auth/csrf"), {
+    credentials: "include",
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Could not verify your session (HTTP ${response.status}). Please sign in again.`,
+    );
+  }
+  const result = await response.json();
+  if (typeof result?.csrf_token !== "string" || !result.csrf_token) {
+    throw new Error("The CSRF token response was not in the expected format.");
+  }
+  return result.csrf_token;
 }
 
-async function postJson(url, body, label) {
-  const response = await fetch(url, {
+async function postJson(url, body, label, requiresCsrf = false) {
+  const headers = { "Content-Type": "application/json" };
+  if (requiresCsrf) {
+    headers["X-CSRF-Token"] = await getCsrfToken();
+  }
+  const response = await fetch(apiUrl(url), {
     method: "POST",
-    credentials: "same-origin",
-    headers: {
-      "Content-Type": "application/json",
-      "X-CSRF-Token": getCsrfToken(),
-    },
+    credentials: "include",
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!response.ok) {
@@ -43,7 +59,9 @@ async function postJson(url, body, label) {
 }
 
 export async function fetchCurrentUser() {
-  const response = await fetch("/api/auth/me", { credentials: "same-origin" });
+  const response = await fetch(apiUrl("/api/auth/me"), {
+    credentials: "include",
+  });
   if (response.status === 401) {
     return null;
   }
@@ -70,11 +88,11 @@ export async function loginUser(credentials) {
 }
 
 export async function logoutUser() {
-  await postJson("/api/auth/logout", undefined, "Sign out");
+  await postJson("/api/auth/logout", undefined, "Sign out", true);
 }
 
 export async function saveWork(work) {
-  return postJson("/api/works", work, "Saving the work");
+  return postJson("/api/works", work, "Saving the work", true);
 }
 
 export async function fetchWorks(search = "", filters = {}) {

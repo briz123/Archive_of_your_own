@@ -108,8 +108,8 @@ function AuthForm({ onAuthenticated }) {
         </button>
       </p>
       <p className="prototype-notice">
-        This prototype still uploads and stores imported files on its backend.
-        Local-only import is not available yet.
+        Only extracted metadata is saved to AYO. Your EPUB and PDF files stay
+        on your computer.
       </p>
     </section>
   );

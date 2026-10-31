@@ -87,19 +87,13 @@ function WorkCard({ work }) {
                 <strong>{file.file_format}</strong>
                 <span className="file-size">{formatFileSize(file.file_size)}</span>
               </span>
-              {file.storage_provider === "legacy_server" ? (
-                <a
-                  className="download-link"
-                  href={`/api/works/${work.id}/download`}
-                  aria-label={`Download ${file.original_filename}`}
-                >
-                  Download {file.file_format}
-                </a>
-              ) : (
-                <span className="file-size">
-                  On your computer: {file.original_filename}
-                </span>
-              )}
+              <span className="file-size">
+                {file.storage_provider === "local"
+                  ? `On your computer: ${file.original_filename}`
+                  : file.storage_provider === "legacy_server"
+                    ? `Legacy server copy unavailable: ${file.original_filename}`
+                    : `File unavailable from AYO: ${file.original_filename}`}
+              </span>
             </li>
           ))}
         </ul>
