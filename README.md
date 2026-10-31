@@ -171,8 +171,9 @@ The reusable extractor is in `frontend/src/services/metadata/`. It returns
 the same nullable metadata shape for EPUB and PDF files. EPUB parsing uses
 `fflate` to read only the package metadata and optional cover image from the
 archive; PDF properties are read using Mozilla PDF.js. Both operate on the
-selected file bytes in the browser. The import form previews the fields and
-tags, then posts only metadata and a locally computed SHA-256 fingerprint.
+selected file bytes in the browser. Multiple EPUB and PDF files can be selected
+together; each file is processed and reviewed in sequence before its metadata
+and locally computed SHA-256 fingerprint are saved.
 
 Supported EPUB fields include title, author, description, language, publisher,
 publication date, identifier, cover, subject-derived fandom/character/

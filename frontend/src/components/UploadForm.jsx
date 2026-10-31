@@ -112,9 +112,10 @@ function UploadForm({ onSaved }) {
 
   return (
     <section className="upload-section" aria-labelledby="upload-heading">
-      <h2 id="upload-heading">Import a book</h2>
+      <h2 id="upload-heading">Import books</h2>
       <p>
-        Choose an EPUB or PDF file, or select an EPUB folder. Metadata is processed in your browser.
+        Choose one or more EPUB or PDF files, or select an EPUB folder.
+        Selected files are processed one at a time for review in your browser.
       </p>
       <p className="prototype-notice">
         The file is read locally. Only its extracted metadata and fingerprint
