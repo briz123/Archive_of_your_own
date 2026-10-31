@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.config import (
     CSRF_COOKIE_NAME,
     SESSION_COOKIE_NAME,
+    SESSION_COOKIE_SAMESITE,
     SESSION_COOKIE_SECURE,
     SESSION_MAX_AGE_SECONDS,
     TRUSTED_FRONTEND_ORIGINS,
@@ -88,7 +89,7 @@ def _set_session_cookies(
         max_age=SESSION_MAX_AGE_SECONDS,
         httponly=True,
         secure=SESSION_COOKIE_SECURE,
-        samesite="lax",
+        samesite=SESSION_COOKIE_SAMESITE,
         path="/",
     )
     response.set_cookie(
@@ -97,7 +98,7 @@ def _set_session_cookies(
         max_age=SESSION_MAX_AGE_SECONDS,
         httponly=False,
         secure=SESSION_COOKIE_SECURE,
-        samesite="lax",
+        samesite=SESSION_COOKIE_SAMESITE,
         path="/",
     )
 
@@ -107,14 +108,14 @@ def _clear_session_cookies(response: Response) -> None:
         key=SESSION_COOKIE_NAME,
         httponly=True,
         secure=SESSION_COOKIE_SECURE,
-        samesite="lax",
+        samesite=SESSION_COOKIE_SAMESITE,
         path="/",
     )
     response.delete_cookie(
         key=CSRF_COOKIE_NAME,
         httponly=False,
         secure=SESSION_COOKIE_SECURE,
-        samesite="lax",
+        samesite=SESSION_COOKIE_SAMESITE,
         path="/",
     )
 
@@ -274,6 +275,23 @@ def login(
 @router.get("/me", response_model=AuthUserRead)
 def get_me(user: CurrentUser) -> User:
     return user
+
+
+@router.get("/csrf")
+def get_csrf_token(
+    request: Request,
+    response: Response,
+    user: CurrentUser,
+) -> dict[str, str]:
+    _verify_trusted_origin(request)
+    csrf_token = request.cookies.get(CSRF_COOKIE_NAME)
+    if not csrf_token:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="CSRF token is unavailable. Please sign in again.",
+        )
+    response.headers["Cache-Control"] = "no-store"
+    return {"csrf_token": csrf_token}
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

@@ -1,17 +1,20 @@
 import os
-from pathlib import Path
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
-MAX_UPLOAD_SIZE_BYTES = int(os.getenv("MAX_UPLOAD_SIZE_BYTES", str(50 * 1024 * 1024)))
 ADVANCED_SEARCH_ENABLED = os.getenv(
     "ENABLE_ADVANCED_SEARCH", "true"
 ).strip().lower() in {"1", "true", "yes", "on"}
 SESSION_COOKIE_SECURE = os.getenv(
-    "SESSION_COOKIE_SECURE", "false"
+    "SESSION_COOKIE_SECURE", "true"
 ).strip().lower() in {"1", "true", "yes", "on"}
+SESSION_COOKIE_SAMESITE = os.getenv("SESSION_COOKIE_SAMESITE", "lax").lower()
+if SESSION_COOKIE_SAMESITE not in {"lax", "strict", "none"}:
+    raise RuntimeError("SESSION_COOKIE_SAMESITE must be lax, strict, or none.")
+if SESSION_COOKIE_SAMESITE == "none" and not SESSION_COOKIE_SECURE:
+    raise RuntimeError("SESSION_COOKIE_SECURE must be true when SameSite is none.")
 SESSION_COOKIE_NAME = "ayo_session"
 CSRF_COOKIE_NAME = "ayo_csrf"
 SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 14
@@ -24,9 +27,6 @@ TRUSTED_FRONTEND_ORIGINS = {
     ).split(",")
     if origin.strip()
 }
-UPLOAD_STORAGE_DIR = Path(
-    os.getenv("UPLOAD_STORAGE_DIR", str(Path(__file__).resolve().parents[1] / "uploads"))
-)
 
 
 def get_database_url() -> str:
@@ -35,4 +35,6 @@ def get_database_url() -> str:
         raise RuntimeError(
             "DATABASE_URL is not set. Copy .env.example to .env and configure it."
         )
+    if database_url.startswith("postgres://"):
+        database_url = "postgresql://" + database_url.removeprefix("postgres://")
     return database_url
