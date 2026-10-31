@@ -353,6 +353,22 @@ def import_work(
     user: CurrentUser,
     db: Session = Depends(get_db),
 ) -> Work:
+    if body.file.fingerprint_version == 2:
+        duplicate_file_id = db.scalar(
+            select(WorkFile.id)
+            .join(Work, Work.id == WorkFile.work_id)
+            .where(
+                Work.user_id == user.id,
+                WorkFile.checksum == body.file.checksum.lower(),
+                WorkFile.fingerprint_version == body.file.fingerprint_version,
+            )
+        )
+        if duplicate_file_id is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This book is already in your library.",
+            )
+
     filename = body.file.original_filename
     title = body.title or PurePath(filename).stem or filename
     publication_datetime = None
@@ -406,6 +422,7 @@ def import_work(
             file_format=body.file.file_format,
             file_size=body.file.file_size,
             checksum=body.file.checksum.lower(),
+            fingerprint_version=body.file.fingerprint_version,
             storage_provider="local",
             status="cataloged",
         )

@@ -21,6 +21,9 @@ class WorkFile(Base):
     file_format: Mapped[str] = mapped_column(String(20), nullable=False)
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
     checksum: Mapped[Optional[str]] = mapped_column(String(64))
+    fingerprint_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
     storage_provider: Mapped[str] = mapped_column(
         String(50), nullable=False, default="local", server_default="local"
     )
