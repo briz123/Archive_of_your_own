@@ -9,7 +9,7 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: TRUSTED_FRONTEND_ORIGINS
-        value: https://archive-of-your-own.onrender.com,https://briz123.github.io
+        value: https://archive-of-your-own-d7mv.onrender.com,https://briz123.github.io
       - key: SESSION_COOKIE_SECURE
         value: "true"
       - key: SESSION_COOKIE_SAMESITE
