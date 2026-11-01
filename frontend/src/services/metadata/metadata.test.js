@@ -41,6 +41,10 @@ function makeEpub({
   `,
   mimetype = "application/epub+zip",
   cover = true,
+  titlePage = null,
+  titlePageId = "titlepage",
+  titlePageHref = "titlepage.xhtml",
+  navigation = null,
   compressionLevel = 0,
   includeMimetype = true,
 } = {}) {
@@ -48,6 +52,12 @@ function makeEpub({
     ? '<item id="cover-id" href="images/cover.jpg" media-type="image/jpeg"/>'
     : "";
   const coverMeta = cover ? '<meta name="cover" content="cover-id"/>' : "";
+  const titlePageManifest = titlePage
+    ? `<item id="${titlePageId}" href="${titlePageHref}" media-type="application/xhtml+xml"/>`
+    : "";
+  const navigationManifest = navigation
+    ? '<item id="navigation" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>'
+    : "";
   const files = {
     "META-INF/container.xml": encode(`
       <container xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
@@ -61,7 +71,7 @@ function makeEpub({
       <package xmlns="http://www.idpf.org/2007/opf"
         xmlns:dc="http://purl.org/dc/elements/1.1/">
         <metadata>${metadata}${coverMeta}</metadata>
-        <manifest>${coverManifest}</manifest>
+        <manifest>${coverManifest}${titlePageManifest}${navigationManifest}</manifest>
       </package>
     `),
   };
@@ -70,6 +80,12 @@ function makeEpub({
   }
   if (cover) {
     files["OEBPS/images/cover.jpg"] = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
+  }
+  if (titlePage) {
+    files[`OEBPS/${titlePageHref}`] = encode(titlePage);
+  }
+  if (navigation) {
+    files["OEBPS/nav.xhtml"] = encode(navigation);
   }
   return zipSync(files, { level: compressionLevel });
 }
@@ -155,13 +171,228 @@ describe("EPUB metadata extraction", () => {
     expect(result.coverImage.mediaType).toBe("image/jpeg");
   });
 
+  it("uses explicit AO3 tag labels when classifying EPUB subjects", async () => {
+    const result = await extractEpubMetadata(
+      makeFile(
+        "labeled-tags.epub",
+        makeEpub({
+          metadata: `
+            <dc:title>Tag Classification Sample</dc:title>
+            <dc:subject>Fandom: Harry Potter - J. K. Rowling</dc:subject>
+            <dc:subject>Relationship: Harry Potter/Tom Riddle</dc:subject>
+            <dc:subject>Character: Harry Potter</dc:subject>
+            <dc:subject>Character: Tom Riddle | Voldemort</dc:subject>
+            <dc:subject>Additional Tags: Friendship/Love</dc:subject>
+          `,
+        }),
+        "application/epub+zip",
+      ),
+    );
+
+    expect(result.tags).toEqual([
+      { name: "Harry Potter - J. K. Rowling", type: "fandom" },
+      { name: "Harry Potter/Tom Riddle", type: "relationship" },
+      { name: "Harry Potter", type: "character" },
+      { name: "Tom Riddle | Voldemort", type: "character" },
+      { name: "Friendship/Love", type: "additional" },
+    ]);
+  });
+
+  it("uses AO3 title-page tag sections when OPF subjects are untyped", async () => {
+    const result = await extractEpubMetadata(
+      makeFile(
+        "ao3-titlepage.epub",
+        makeEpub({
+          metadata: `
+            <dc:title>Metadata Classification Sample</dc:title>
+            <dc:subject>Not Rated</dc:subject>
+            <dc:subject>No Archive Warnings Apply</dc:subject>
+            <dc:subject>Harry Potter - J. K. Rowling, Worm - Fandom</dc:subject>
+            <dc:subject>Taylor Hebert | Skitter | Weaver</dc:subject>
+            <dc:language>English</dc:language>
+          `,
+          titlePage: `
+            <html xmlns="http://www.w3.org/1999/xhtml">
+              <body>
+                <dl>
+                  <dt>Rating:</dt><dd>Not Rated</dd>
+                  <dt>Archive Warning:</dt><dd>No Archive Warnings Apply</dd>
+                  <dt>Fandom:</dt>
+                  <dd><a>Harry Potter - J. K. Rowling</a><a>Worm - Fandom</a></dd>
+                  <dt>Character:</dt>
+                  <dd><a>Taylor Hebert | Skitter | Weaver</a></dd>
+                </dl>
+              </body>
+            </html>
+          `,
+        }),
+        "application/epub+zip",
+      ),
+    );
+
+    expect(result.tags).toEqual([
+      { name: "Harry Potter - J. K. Rowling", type: "fandom" },
+      { name: "Worm - Fandom", type: "fandom" },
+      { name: "Taylor Hebert | Skitter | Weaver", type: "character" },
+    ]);
+  });
+
+  it("classifies linked tags from AO3 definition-list metadata", async () => {
+    const result = await extractEpubMetadata(
+      makeFile(
+        "ao3-definition-list.epub",
+        makeEpub({
+          metadata: `
+            <dc:title>Definition List Classification Sample</dc:title>
+            <dc:subject>TAG_FANDOM</dc:subject>
+            <dc:subject>TAG_CHARACTER</dc:subject>
+          `,
+          titlePage: `
+            <html xmlns="http://www.w3.org/1999/xhtml">
+              <body>
+                <dl class="tags">
+                  <dt>Rating:</dt><dd><a>Not Rated</a></dd>
+                  <dt>Archive Warning:</dt><dd><a>Choose Not To Use Archive Warnings</a></dd>
+                  <dt>Fandom:</dt><dd><a>TAG_FANDOM</a></dd>
+                  <dt>Character:</dt><dd><a>TAG_CHARACTER</a></dd>
+                  <dt>Language:</dt><dd>English</dd>
+                  <dt>Collections:</dt><dd><a>COLLECTION_NAME</a></dd>
+                </dl>
+              </body>
+            </html>
+          `,
+        }),
+        "application/epub+zip",
+      ),
+    );
+
+    expect(result.tags).toEqual([
+      { name: "TAG_FANDOM", type: "fandom" },
+      { name: "TAG_CHARACTER", type: "character" },
+    ]);
+  });
+
+  it("finds AO3 tag metadata in its split_000 preface document", async () => {
+    const result = await extractEpubMetadata(
+      makeFile(
+        "split-preface.epub",
+        makeEpub({
+          metadata: `
+            <dc:title>Split Preface Classification Sample</dc:title>
+            <dc:subject>TAG_FANDOM</dc:subject>
+            <dc:subject>TAG_CHARACTER</dc:subject>
+          `,
+          titlePageId: "item1",
+          titlePageHref: "book_split_000.xhtml",
+          titlePage: `
+            <html xmlns="http://www.w3.org/1999/xhtml">
+              <body>
+                <dl class="tags">
+                  <dt class="label">Fandom:</dt>
+                  <dd class="value"><a href="/tags/TAG_FANDOM">TAG_FANDOM</a></dd>
+                  <dt class="label">Character:</dt>
+                  <dd class="value"><a href="/tags/TAG_CHARACTER">TAG_CHARACTER</a></dd>
+                  <dt class="label">Language:</dt><dd>English</dd>
+                </dl>
+                <p>Unrelated text is outside the tag list.</p>
+              </body>
+            </html>
+          `,
+        }),
+        "application/epub+zip",
+      ),
+    );
+
+    expect(result.tags).toEqual([
+      { name: "TAG_FANDOM", type: "fandom" },
+      { name: "TAG_CHARACTER", type: "character" },
+    ]);
+  });
+
+  it("uses title-page headings as tag boundaries and excludes following sections", async () => {
+    const result = await extractEpubMetadata(
+      makeFile(
+        "heading-tags.epub",
+        makeEpub({
+          metadata: `
+            <dc:title>Heading Classification Sample</dc:title>
+            <dc:subject>TAG_FANDOM</dc:subject>
+            <dc:subject>TAG_CHARACTER</dc:subject>
+          `,
+          titlePage: `
+            <html xmlns="http://www.w3.org/1999/xhtml">
+              <body>
+                <h2>Fandom:</h2>
+                <ul><li><a>TAG_FANDOM</a></li></ul>
+                <h2>Character:</h2>
+                <ul><li><a>TAG_CHARACTER</a></li></ul>
+                <h2>Language:</h2>
+                <p>English</p>
+                <h2>Collections:</h2>
+                <ul><li><a>COLLECTION_NAME</a></li></ul>
+              </body>
+            </html>
+          `,
+        }),
+        "application/epub+zip",
+      ),
+    );
+
+    expect(result.tags).toEqual([
+      { name: "TAG_FANDOM", type: "fandom" },
+      { name: "TAG_CHARACTER", type: "character" },
+    ]);
+  });
+
+  it("finds the title page through EPUB navigation landmarks", async () => {
+    const result = await extractEpubMetadata(
+      makeFile(
+        "navigation-titlepage.epub",
+        makeEpub({
+          metadata: `
+            <dc:title>Navigation Classification Sample</dc:title>
+            <dc:subject>TAG_FANDOM</dc:subject>
+            <dc:subject>TAG_CHARACTER</dc:subject>
+          `,
+          titlePageHref: "front.xhtml",
+          titlePage: `
+            <html xmlns="http://www.w3.org/1999/xhtml">
+              <body>
+                <h2>Fandom:</h2><ul><li><a>TAG_FANDOM</a></li></ul>
+                <h2>Character:</h2><ul><li><a>TAG_CHARACTER</a></li></ul>
+              </body>
+            </html>
+          `,
+          navigation: `
+            <html xmlns="http://www.w3.org/1999/xhtml"
+              xmlns:epub="http://www.idpf.org/2007/ops">
+              <body>
+                <nav epub:type="landmarks">
+                  <a epub:type="title-page" href="front.xhtml">Title Page</a>
+                </nav>
+              </body>
+            </html>
+          `,
+        }),
+        "application/epub+zip",
+      ),
+    );
+
+    expect(result.tags).toEqual([
+      { name: "TAG_FANDOM", type: "fandom" },
+      { name: "TAG_CHARACTER", type: "character" },
+    ]);
+  });
+
   it("extracts an unpacked nested EPUB without reading chapters for metadata", async () => {
     const contents = {
       mimetype: "application/epub+zip",
       "META-INF/container.xml":
         `<container><rootfiles><rootfile full-path="OPS/package.opf" media-type="application/oebps-package+xml"/></rootfiles></container>`,
       "OPS/package.opf":
-        `<package xmlns:dc="http://purl.org/dc/elements/1.1/"><metadata><dc:title>The Sample Story</dc:title><dc:creator>Example Author</dc:creator></metadata><manifest/></package>`,
+        `<package xmlns:dc="http://purl.org/dc/elements/1.1/"><metadata><dc:title>The Sample Story</dc:title><dc:creator>Example Author</dc:creator></metadata><manifest><item id="titlepage" href="titlepage.xhtml" media-type="application/xhtml+xml"/></manifest></package>`,
+      "OPS/titlepage.xhtml":
+        `<html xmlns="http://www.w3.org/1999/xhtml"><body><dl><dt>Character:</dt><dd><a>Taylor Hebert</a></dd></dl></body></html>`,
       "OPS/chapter.xhtml": "<html><body>Chapter</body></html>",
     };
     const archive = zipSync(
@@ -178,8 +409,11 @@ describe("EPUB metadata extraction", () => {
 
     expect(metadata.title).toBe("The Sample Story");
     expect(metadata.fileName).toBe("unpacked-book");
+    expect(metadata.tags).toEqual([{ name: "Taylor Hebert", type: "character" }]);
     expect(directoryHandle.children.get("mimetype").getFile).toHaveBeenCalledOnce();
     expect(directoryHandle.children.get("META-INF").children.get("container.xml").getFile)
+      .toHaveBeenCalledOnce();
+    expect(directoryHandle.children.get("OPS").children.get("titlepage.xhtml").getFile)
       .toHaveBeenCalledOnce();
     expect(directoryHandle.children.get("OPS").children.get("chapter.xhtml").getFile)
       .not.toHaveBeenCalled();
