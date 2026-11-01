@@ -38,6 +38,7 @@ const warningValues = new Map([
   ["rape/non-con", "Rape/Non-Con"],
   ["underage", "Underage"],
   ["no archive warnings apply", "No Archive Warnings Apply"],
+  ["choose not to use archive warnings", "Creator Chose Not To Use Archive Warnings"],
   [
     "creator chose not to use archive warnings",
     "Creator Chose Not To Use Archive Warnings",
@@ -48,6 +49,14 @@ const tagSections = new Map([
   ["other relationship tags to be added", "character"],
   ["other character tags to be added", "additional"],
   ["other additional tags to be added", "additional"],
+]);
+
+const tagTypePrefixes = new Map([
+  ["fandom", "fandom"],
+  ["relationship", "relationship"],
+  ["character", "character"],
+  ["additional tag", "additional"],
+  ["additional tags", "additional"],
 ]);
 
 function decodeXml(bytes) {
@@ -757,7 +766,8 @@ function parseSubjects(document, metadata) {
 
   let currentTagType = "fandom";
   const seenTags = new Set();
-  for (const subject of subjects) {
+  for (const rawSubject of subjects) {
+    let subject = rawSubject;
     const normalized = subject.toLowerCase();
     if (normalized === "fanworks") {
       continue;
@@ -783,15 +793,209 @@ function parseSubjects(document, metadata) {
     }
 
     let type = currentTagType;
-    if (type === "fandom" && (subject.includes("/") || subject.includes(" & "))) {
+    const prefixSeparator = subject.indexOf(":");
+    const explicitType =
+      prefixSeparator > 0
+        ? tagTypePrefixes.get(subject.slice(0, prefixSeparator).trim().toLowerCase())
+        : undefined;
+    if (explicitType) {
+      subject = normalizeText(subject.slice(prefixSeparator + 1));
+      if (!subject) {
+        continue;
+      }
+      type = explicitType;
+    } else if (type === "fandom" && (subject.includes("/") || subject.includes(" & "))) {
       type = "relationship";
     }
-    const tagKey = `${type}:${normalized}`;
+    const tagKey = `${type}:${subject.toLowerCase()}`;
     if (!seenTags.has(tagKey)) {
       seenTags.add(tagKey);
       metadata.tags.push({ name: subject, type });
     }
   }
+}
+
+function findTitlePagePath(packageDocument, packagePath) {
+  const references = descendantsByLocalName(packageDocument, "reference")
+    .filter((element) =>
+      ["titlepage", "frontmatter"].includes(
+        findAttribute(element, "type")?.toLowerCase().replace(/[^a-z]/g, ""),
+      ),
+    )
+    .map((element) => findAttribute(element, "href"));
+  const titlePageItems = descendantsByLocalName(packageDocument, "item")
+    .filter((element) => {
+      const href = findAttribute(element, "href");
+      const id = findAttribute(element, "id")?.toLowerCase() ?? "";
+      const fileName = href?.split(/[?#]/, 1)[0].split("/").at(-1).toLowerCase();
+      return (
+        id.includes("titlepage") ||
+        id === "title" ||
+        /(?:^|_)split_000\.(?:xhtml|html)$/.test(fileName) ||
+        fileName === "titlepage.xhtml" ||
+        fileName === "titlepage.html" ||
+        fileName === "title-page.xhtml" ||
+        fileName === "title-page.html" ||
+        fileName === "title.xhtml" ||
+        fileName === "title.html"
+      );
+    })
+    .map((element) => findAttribute(element, "href"));
+
+  for (const reference of [...references, ...titlePageItems]) {
+    if (reference) {
+      const path = resolveArchivePath(packagePath, reference);
+      if (path) {
+        return path;
+      }
+    }
+  }
+  return null;
+}
+
+function findNavigationPath(packageDocument, packagePath) {
+  const navItem = descendantsByLocalName(packageDocument, "item").find(
+    (element) =>
+      (findAttribute(element, "properties") || "")
+        .split(/\s+/)
+        .includes("nav"),
+  );
+  const href = navItem && findAttribute(navItem, "href");
+  return href ? resolveArchivePath(packagePath, href) : null;
+}
+
+function titlePageLandmarkPath(document, navigationPath) {
+  const anchors = descendantsByLocalName(document, "a");
+  for (const anchor of anchors) {
+    const epubType =
+      anchor.getAttributeNS("http://www.idpf.org/2007/ops", "type") ??
+      findAttribute(anchor, "epub:type") ??
+      "";
+    const typeTokens = epubType.toLowerCase().split(/\s+/);
+    const label = normalizeText(anchor.textContent)?.toLowerCase();
+    if (
+      typeTokens.includes("title-page") ||
+      typeTokens.includes("titlepage") ||
+      label === "title page"
+    ) {
+      const href = findAttribute(anchor, "href");
+      const path = href && resolveArchivePath(navigationPath, href);
+      if (path) {
+        return path;
+      }
+    }
+  }
+  return null;
+}
+
+function parseTitlePageTags(document) {
+  const labels = new Map([
+    ["fandom", "fandom"],
+    ["fandoms", "fandom"],
+    ["relationship", "relationship"],
+    ["relationships", "relationship"],
+    ["character", "character"],
+    ["characters", "character"],
+    ["additional tag", "additional"],
+    ["additional tags", "additional"],
+  ]);
+  const tags = [];
+  const sectionHeaders = new Set([
+    ...labels.keys(),
+    "rating",
+    "archive warning",
+    "archive warnings",
+    "category",
+    "language",
+    "collections",
+  ]);
+  const tagLists = Array.from(document.getElementsByTagName("*")).filter(
+    (element) =>
+      element.localName.toLowerCase() === "dl" &&
+      (element.getAttribute("class") || "").split(/\s+/).includes("tags"),
+  );
+  const roots = tagLists.length > 0 ? tagLists : [document];
+  const labelElements = roots.flatMap((root) =>
+    Array.from(root.getElementsByTagName("*")),
+  );
+  const seen = new Set();
+  for (const element of labelElements) {
+    const label = normalizeText(element.textContent)
+      ?.replace(/:$/, "")
+      .toLowerCase();
+    const type = labels.get(label);
+    if (!type) {
+      continue;
+    }
+
+    const valueElements = [];
+    if (element.localName.toLowerCase() === "dt") {
+      const valueElement = element.nextElementSibling;
+      if (valueElement?.localName.toLowerCase() === "dd") {
+        valueElements.push(valueElement);
+      }
+    } else if (tagLists.length === 0) {
+      const ownAnchors = descendantsByLocalName(element, "a");
+      if (ownAnchors.length > 0) {
+        valueElements.push(element);
+      }
+      let sibling = element.nextElementSibling;
+      while (sibling) {
+        const siblingText = normalizeText(sibling.textContent)
+          ?.replace(/:$/, "")
+          .toLowerCase();
+        if (
+          sectionHeaders.has(siblingText) ||
+          ["h1", "h2", "h3", "h4", "h5", "h6", "dt"].includes(
+            sibling.localName.toLowerCase(),
+          )
+        ) {
+          break;
+        }
+        valueElements.push(sibling);
+        sibling = sibling.nextElementSibling;
+      }
+    }
+
+    for (const valueElement of valueElements) {
+      for (const anchor of descendantsByLocalName(valueElement, "a")) {
+        const name = normalizeText(anchor.textContent);
+        const key = `${type}:${name?.toLowerCase()}`;
+        if (name && !seen.has(key)) {
+          seen.add(key);
+          tags.push({ name, type });
+        }
+      }
+    }
+  }
+  return tags;
+}
+
+async function readTitlePageTags(source, packageDocument, packagePath) {
+  let titlePagePath = findTitlePagePath(packageDocument, packagePath);
+  if (!titlePagePath) {
+    const navigationPath = findNavigationPath(packageDocument, packagePath);
+    if (navigationPath) {
+      const navigationBytes = await source.read(
+        navigationPath,
+        MAX_METADATA_ENTRY_SIZE_BYTES,
+      );
+      if (navigationBytes) {
+        titlePagePath = titlePageLandmarkPath(
+          parseXml(decodeXml(navigationBytes)),
+          navigationPath,
+        );
+      }
+    }
+  }
+  if (!titlePagePath) {
+    return [];
+  }
+  const bytes = await source.read(titlePagePath, MAX_METADATA_ENTRY_SIZE_BYTES);
+  if (!bytes) {
+    return [];
+  }
+  return parseTitlePageTags(parseXml(decodeXml(bytes)));
 }
 
 function parseCoverReference(document) {
@@ -836,6 +1040,21 @@ export async function extractEpubMetadata(file) {
   metadata.publicationDate = firstText(packageDocument, "date");
   metadata.identifier = firstText(packageDocument, "identifier");
   parseSubjects(packageDocument, metadata);
+  const titlePageTags = await readTitlePageTags(
+    source,
+    packageDocument,
+    packagePath,
+  );
+  if (titlePageTags.length > 0) {
+    metadata.tags = titlePageTags.filter(
+      (tag, index, tags) =>
+        tags.findIndex(
+          (candidate) =>
+            candidate.type === tag.type &&
+            candidate.name.toLowerCase() === tag.name.toLowerCase(),
+        ) === index,
+    );
+  }
 
   const cover = parseCoverReference(packageDocument);
   if (cover) {
