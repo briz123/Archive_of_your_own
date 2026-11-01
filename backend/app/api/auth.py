@@ -121,6 +121,7 @@ def _clear_session_cookies(response: Response) -> None:
 
 
 def _create_session(db: Session, user: User, response: Response) -> None:
+    """Keep only token hashes in the database; send raw tokens only as cookies."""
     session_token = secrets.token_urlsafe(32)
     csrf_token = secrets.token_urlsafe(32)
     db.add(
@@ -147,6 +148,7 @@ def get_current_user(
     request: Request,
     db: Annotated[Session, Depends(get_db)],
 ) -> User:
+    """Authenticate each request and require CSRF proof for state-changing methods."""
     session_token = request.cookies.get(SESSION_COOKIE_NAME)
     if not session_token:
         raise HTTPException(
@@ -174,6 +176,7 @@ def get_current_user(
         )
 
     if request.method not in {"GET", "HEAD", "OPTIONS"}:
+        # Match both the browser cookie and header to the stored token hash.
         csrf_cookie = request.cookies.get(CSRF_COOKIE_NAME, "")
         csrf_header = request.headers.get("x-csrf-token", "")
         if (

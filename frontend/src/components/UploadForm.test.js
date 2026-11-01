@@ -2,13 +2,17 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { extractMetadata, saveWork } = vi.hoisted(() => ({
+const { calculateFingerprint, extractMetadata, saveWork } = vi.hoisted(() => ({
+  calculateFingerprint: vi.fn(),
   extractMetadata: vi.fn(),
   saveWork: vi.fn(),
 }));
 
 vi.mock("../services/api.js", () => ({ saveWork }));
-vi.mock("../services/metadata/index.js", () => ({ extractMetadata }));
+vi.mock("../services/metadata/index.js", () => ({
+  calculateFingerprint,
+  extractMetadata,
+}));
 
 import UploadForm from "./UploadForm.jsx";
 
@@ -16,6 +20,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 let container;
 let root;
+let showDirectoryPickerDescriptor;
 
 afterEach(async () => {
   if (root) {
@@ -24,6 +29,12 @@ afterEach(async () => {
   container?.remove();
   container = null;
   root = null;
+  if (showDirectoryPickerDescriptor) {
+    Object.defineProperty(window, "showDirectoryPicker", showDirectoryPickerDescriptor);
+    showDirectoryPickerDescriptor = null;
+  } else {
+    delete window.showDirectoryPicker;
+  }
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
@@ -36,10 +47,10 @@ function makeFile(name) {
   return file;
 }
 
-async function selectFile(input, file) {
+async function selectFile(input, files) {
   Object.defineProperty(input, "files", {
     configurable: true,
-    value: [file],
+    value: Array.isArray(files) ? files : [files],
   });
   await act(async () => {
     input.dispatchEvent(new Event("change", { bubbles: true }));
@@ -47,9 +58,94 @@ async function selectFile(input, file) {
 }
 
 describe("UploadForm file selection", () => {
-  it("clears the selection after save and accepts the next file", async () => {
+  it("uses the shared metadata and fingerprint flow for an unpacked EPUB folder", async () => {
+    const directoryHandle = {
+      kind: "directory",
+      name: "unpacked.epub",
+      getDirectoryHandle: vi.fn(),
+      getFileHandle: vi.fn(),
+    };
+    showDirectoryPickerDescriptor = Object.getOwnPropertyDescriptor(
+      window,
+      "showDirectoryPicker",
+    );
+    Object.defineProperty(window, "showDirectoryPicker", {
+      configurable: true,
+      value: vi.fn().mockResolvedValue(directoryHandle),
+    });
+    extractMetadata.mockResolvedValue({
+      format: "EPUB",
+      fileName: "unpacked.epub",
+      title: "Unpacked Story",
+      author: null,
+      description: null,
+      language: null,
+      publisher: null,
+      publicationDate: null,
+      identifier: null,
+      subject: null,
+      creator: null,
+      producer: null,
+      creationDate: null,
+      modificationDate: null,
+      rating: null,
+      category: null,
+      archiveWarnings: [],
+      tags: [],
+      coverImage: null,
+    });
+    calculateFingerprint.mockResolvedValue({
+      fileSize: 24,
+      fingerprintVersion: 2,
+      checksum: "a".repeat(64),
+    });
+    saveWork.mockResolvedValue({});
+
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => root.render(createElement(UploadForm)));
+
+    expect(container.textContent).toContain(
+      "AYO saves the metadata and a locally calculated file fingerprint to your account—not the book itself.",
+    );
+    await act(async () => {
+      [...container.querySelectorAll("button")]
+        .find((button) => button.textContent.includes("Choose an EPUB folder"))
+        .click();
+    });
+    expect(window.showDirectoryPicker).toHaveBeenCalledWith({ mode: "read" });
+    await act(async () => {
+      container.querySelector('button[type="submit"]').click();
+    });
+    expect(extractMetadata).toHaveBeenCalledWith(directoryHandle);
+    expect(container.textContent).toContain(
+      "Nothing has been saved yet; the file stays on this device.",
+    );
+    await act(async () => {
+      [...container.querySelectorAll("button")]
+        .find((button) => button.textContent.includes("Save catalog details"))
+        .click();
+    });
+
+    expect(calculateFingerprint).toHaveBeenCalledWith(directoryHandle, "EPUB");
+    expect(container.textContent).toContain("The file itself was not uploaded");
+    expect(saveWork).toHaveBeenCalledWith(
+      expect.objectContaining({
+        file: expect.objectContaining({
+          original_filename: "unpacked.epub",
+          file_size: 24,
+          checksum: "a".repeat(64),
+          fingerprint_version: 2,
+        }),
+      }),
+    );
+  });
+
+  it("replaces the selected file across consecutive imports", async () => {
     const firstFile = makeFile("first.epub");
     const secondFile = makeFile("second.EPUB");
+    const thirdFile = makeFile("third.epub");
     const metadata = {
       format: "EPUB",
       fileName: "first.epub",
@@ -72,10 +168,12 @@ describe("UploadForm file selection", () => {
       coverImage: null,
     };
     extractMetadata.mockResolvedValue(metadata);
-    saveWork.mockResolvedValue({});
-    vi.stubGlobal("crypto", {
-      subtle: { digest: vi.fn().mockResolvedValue(new ArrayBuffer(32)) },
+    calculateFingerprint.mockResolvedValue({
+      fileSize: 9,
+      fingerprintVersion: 1,
+      checksum: "b".repeat(64),
     });
+    saveWork.mockResolvedValue({});
 
     container = document.createElement("div");
     document.body.append(container);
@@ -84,12 +182,14 @@ describe("UploadForm file selection", () => {
 
     const input = container.querySelector('input[type="file"]');
     await selectFile(input, firstFile);
+    expect(input.value).toBe("");
+    expect(container.textContent).toContain("Selected file: first.epub");
     await act(async () => {
       container.querySelector('button[type="submit"]').click();
     });
     await act(async () => {
       [...container.querySelectorAll("button")]
-        .find((button) => button.textContent.includes("Add to my library"))
+        .find((button) => button.textContent.includes("Save catalog details"))
         .click();
     });
 
@@ -98,10 +198,101 @@ describe("UploadForm file selection", () => {
     expect(container.querySelector('button[type="submit"]').disabled).toBe(true);
 
     await selectFile(input, secondFile);
+    expect(container.textContent).toContain("Selected file: second.EPUB");
+    expect(container.textContent).not.toContain("Selected file: first.epub");
     expect(container.querySelector('button[type="submit"]').disabled).toBe(false);
     await act(async () => {
       container.querySelector('button[type="submit"]').click();
     });
     expect(extractMetadata).toHaveBeenNthCalledWith(2, secondFile);
+    await act(async () => {
+      [...container.querySelectorAll("button")]
+        .find((button) => button.textContent.includes("Save catalog details"))
+        .click();
+    });
+
+    await selectFile(input, thirdFile);
+    expect(container.textContent).toContain("Selected file: third.epub");
+    expect(container.textContent).not.toContain("Selected file: second.EPUB");
+    await act(async () => {
+      container.querySelector('button[type="submit"]').click();
+    });
+    expect(extractMetadata).toHaveBeenNthCalledWith(3, thirdFile);
+    expect(saveWork).toHaveBeenCalledTimes(2);
+  });
+
+  it("extracts and saves multiple selected files in sequence", async () => {
+    const firstFile = makeFile("first.epub");
+    const secondFile = makeFile("second.pdf");
+    extractMetadata.mockImplementation(async (file) => ({
+      format: file.name.endsWith(".pdf") ? "PDF" : "EPUB",
+      fileName: file.name,
+      title: file.name,
+      author: null,
+      description: null,
+      language: null,
+      publisher: null,
+      publicationDate: null,
+      identifier: null,
+      subject: null,
+      creator: null,
+      producer: null,
+      creationDate: null,
+      modificationDate: null,
+      rating: null,
+      category: null,
+      archiveWarnings: [],
+      tags: [],
+      coverImage: null,
+    }));
+    calculateFingerprint.mockResolvedValue({
+      fileSize: 9,
+      fingerprintVersion: 1,
+      checksum: "c".repeat(64),
+    });
+    saveWork.mockResolvedValue({});
+
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => root.render(createElement(UploadForm)));
+
+    const input = container.querySelector('input[type="file"]');
+    expect(input.multiple).toBe(true);
+    await selectFile(input, [firstFile, secondFile]);
+    expect(container.textContent).toContain("File 1 of 2: first.epub");
+
+    await act(async () => {
+      container.querySelector('button[type="submit"]').click();
+    });
+    expect(extractMetadata).toHaveBeenNthCalledWith(1, firstFile);
+    await act(async () => {
+      [...container.querySelectorAll("button")]
+        .find((button) => button.textContent.includes("Save catalog details"))
+        .click();
+    });
+
+    expect(saveWork).toHaveBeenCalledOnce();
+    expect(container.textContent).toContain(
+      "Saved catalog details for 1 of 2 selected files. No book files were uploaded.",
+    );
+    expect(container.textContent).toContain("File 2 of 2: second.pdf");
+    await act(async () => {
+      container.querySelector('button[type="submit"]').click();
+    });
+    expect(extractMetadata).toHaveBeenNthCalledWith(2, secondFile);
+    await act(async () => {
+      [...container.querySelectorAll("button")]
+        .find((button) => button.textContent.includes("Save catalog details"))
+        .click();
+    });
+
+    expect(saveWork).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain(
+      "Saved catalog details for all 2 selected files. No book files were uploaded.",
+    );
+    expect(container.textContent).toContain(
+      "Catalog details for second.pdf are saved to your library.",
+    );
   });
 });

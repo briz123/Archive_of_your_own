@@ -22,11 +22,11 @@ AYO aims to provide:
 - File relinking after files are moved or replaced.
 - Export of library metadata.
 
-During import, AYO should temporarily read the selected file, extract available
-metadata, calculate a fingerprint for duplicate detection, and let the user
-review and edit the result. Only the work's metadata should be saved to
-PostgreSQL. The original book should remain on the user's computer and should
-not be permanently uploaded to AYO's server.
+When cataloging a book, AYO reads the selected file in the browser to extract
+and preview its metadata. Nothing is saved until the user chooses to add the
+catalog entry. AYO then saves the metadata and a locally calculated fingerprint
+for duplicate detection to PostgreSQL; the original book stays on the user's
+computer and is never uploaded to AYO's server.
 
 ## What AYO is not
 
@@ -44,9 +44,20 @@ replacement for a user's own backups.
 ## Current prototype status
 
 Accounts, private work/tag ownership, and browser-side metadata import are
-implemented. File relinking, collections, favorites, and duplicate detection
-are not. Saving an import stores metadata and a SHA-256 fingerprint only; the
-selected file is not sent to the backend.
+implemented. EPUB imports support standard archives, archives under a common
+enclosing directory, EPUB files nested in ZIP archives, and unpacked EPUB
+folders (using Chrome's directory picker). Metadata discovery indexes ZIP
+entries and follows `META-INF/container.xml` to the OPF without reading chapter
+files; a unique valid OPF is a controlled fallback when the container is
+missing. Missing or misplaced `mimetype` entries produce a structural warning
+instead of blocking otherwise valid metadata extraction. Nested archive
+inspection is bounded by entry-count, expanded-size, and nesting-depth limits.
+Fingerprinting remains separate and uses the existing version 2 canonical
+uncompressed-content algorithm. Duplicate detection uses those fingerprints
+within each user's library.
+File relinking, collections, and favorites are not implemented. Saving an
+import stores metadata and a SHA-256 fingerprint only; the selected file is
+not sent to the backend.
 
 ## Copyright & Content Disclaimer
 
@@ -102,9 +113,10 @@ Where available, imported work metadata should retain:
 AYO is under development. The current prototype uses React, Python/FastAPI,
 PostgreSQL, SQLAlchemy, and Alembic. Email/password accounts and owner-scoped
 library APIs are implemented. EPUB and PDF metadata extraction now runs in the
-browser and does not upload the selected file. Saving an import creates a
-private work record and local-file metadata record. The backend has no
-server-side book upload or download routes.
+browser and does not upload the selected file. Saving catalog details creates
+a private work record and a local-file record containing metadata about the
+file, not its contents. The backend has no server-side book upload or download
+routes.
 
 The prototype is experimental and should not be relied upon as the sole catalog
 or backup of any work.
@@ -160,16 +172,24 @@ The reusable extractor is in `frontend/src/services/metadata/`. It returns
 the same nullable metadata shape for EPUB and PDF files. EPUB parsing uses
 `fflate` to read only the package metadata and optional cover image from the
 archive; PDF properties are read using Mozilla PDF.js. Both operate on the
-selected file bytes in the browser. The import form previews the fields and
-tags, then posts only metadata and a locally computed SHA-256 fingerprint.
+selected file bytes in the browser. Multiple EPUB and PDF files can be selected
+together; each file is processed and reviewed in sequence before its metadata
+and locally computed SHA-256 fingerprint are saved.
+
+The Library page also provides a **Download for Google Sheets** action. It
+downloads a Google Sheets-compatible `.xlsx` workbook with **Read Me**,
+**All Works**, and **Tags** sheets; open or upload the file in Google Sheets.
+Export data is fetched through the authenticated, owner-scoped works API; the
+workbook contains metadata only, not book contents.
 
 Supported EPUB fields include title, author, description, language, publisher,
 publication date, identifier, cover, subject-derived fandom/character/
 relationship/additional tags, rating, category, and archive warnings. PDF
 fields include title, author, subject, creator, producer, creation date, and
 modification date. Missing values are returned as `null`; metadata extraction
-does not assume every file is complete. Input is limited to 100 MiB, EPUB
-metadata entries to 2 MiB, cover art to 5 MiB, and archives to 10,000 entries.
+does not assume every file is complete. Input and total nested expanded size
+are limited to 100 MiB, EPUB metadata entries to 2 MiB, cover art to 5 MiB,
+and each archive to 10,000 entries.
 
 Run the frontend metadata tests and production build from `frontend/`:
 
@@ -189,6 +209,12 @@ From `Archive_of_your_own/backend`, with the virtual environment activated:
 ```bash
 alembic upgrade head
 ```
+
+The latest migration adds a fingerprint version to imported files. Apply
+migrations to the deployed PostgreSQL database before deploying backend code
+that reads or writes that field; Render's start command does not run migrations.
+EPUB imports use version 2 fingerprints computed locally from normalized paths
+and uncompressed contents, while existing fingerprints remain version 1.
 
 Create an account or sign in through the frontend. The backend sets an
 HttpOnly session cookie and a separate CSRF cookie; the session
@@ -284,6 +310,12 @@ After Render creates the service, set it to the full service origin, such as
 Pages workflow. Render is configured to trust
 `https://briz123.github.io`; cookies are configured for HTTPS cross-site
 requests.
+
+If sign-in reports an HTTP 404 while checking your status, verify that
+`VITE_API_BASE_URL` is the backend's origin only (not the Pages URL and not an
+origin with `/api` appended), then redeploy the Pages site. The backend health
+check should respond at `<backend-origin>/api/health`. A signed-out session
+check at `<backend-origin>/api/auth/me` should return HTTP 401, not 404.
 
 Important: the Pages site and a Render `onrender.com` service are different
 sites. Browsers that block third-party cookies may prevent cookie-based login

@@ -13,9 +13,6 @@ function pdfDate(value) {
 
 export async function extractPdfMetadata(file) {
   validateFile(file);
-  if (!file.name.toLowerCase().endsWith(".pdf")) {
-    throw new MetadataExtractionError("The selected file is not a PDF.");
-  }
 
   let fileBytes;
   try {

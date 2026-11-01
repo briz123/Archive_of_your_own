@@ -4,10 +4,12 @@ from pathlib import PurePath
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.library_export import build_library_workbook
 from app.database import get_db
 from app.config import ADVANCED_SEARCH_ENABLED
 from app.models import (
@@ -83,6 +85,27 @@ def _tag_search_condition(term: str):
     )
 
 
+@router.get("/export.xlsx")
+def export_library(
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> Response:
+    """Export this user's catalog metadata without reading or returning book files."""
+    statement = (
+        select(Work)
+        .options(*_work_options())
+        .where(Work.user_id == user.id)
+    )
+    works = list(db.scalars(statement).all())
+    generated_at = datetime.now().astimezone()
+    filename = f"AYO_Library_{generated_at:%Y-%m-%d}.xlsx"
+    return Response(
+        content=build_library_workbook(works, generated_at),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.get("", response_model=list[WorkRead])
 def list_works(
     user: CurrentUser,
@@ -106,6 +129,7 @@ def list_works(
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
 ) -> list[Work]:
+    """Return only the signed-in user's works, with optional search and filters."""
     advanced_filters = (
         tag_id,
         exclude_tag_id,
@@ -353,6 +377,23 @@ def import_work(
     user: CurrentUser,
     db: Session = Depends(get_db),
 ) -> Work:
+    """Save extracted catalog metadata and a local fingerprint, never file contents."""
+    if body.file.fingerprint_version == 2:
+        duplicate_file_id = db.scalar(
+            select(WorkFile.id)
+            .join(Work, Work.id == WorkFile.work_id)
+            .where(
+                Work.user_id == user.id,
+                WorkFile.checksum == body.file.checksum.lower(),
+                WorkFile.fingerprint_version == body.file.fingerprint_version,
+            )
+        )
+        if duplicate_file_id is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This book is already in your library.",
+            )
+
     filename = body.file.original_filename
     title = body.title or PurePath(filename).stem or filename
     publication_datetime = None
@@ -406,6 +447,7 @@ def import_work(
             file_format=body.file.file_format,
             file_size=body.file.file_size,
             checksum=body.file.checksum.lower(),
+            fingerprint_version=body.file.fingerprint_version,
             storage_provider="local",
             status="cataloged",
         )
@@ -422,6 +464,7 @@ def update_work(
     user: CurrentUser,
     db: Session = Depends(get_db),
 ) -> Work:
+    """Update an owned catalog record; omitted tag and warning lists stay unchanged."""
     statement = (
         select(Work)
         .options(*_work_options())

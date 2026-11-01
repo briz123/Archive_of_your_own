@@ -1,4 +1,5 @@
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
+const AUTH_STATUS_TIMEOUT_MS = 15_000;
 
 function apiUrl(path) {
   return `${API_BASE_URL}${path}`;
@@ -58,17 +59,45 @@ async function postJson(url, body, label, requiresCsrf = false) {
   return response.status === 204 ? null : response.json();
 }
 
-export async function fetchCurrentUser() {
-  const response = await fetch(apiUrl("/api/auth/me"), {
-    credentials: "include",
-  });
-  if (response.status === 401) {
-    return null;
+export async function fetchCurrentUser(signal) {
+  // A stalled status request should not leave the application on its loading screen.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(
+    () => controller.abort(),
+    AUTH_STATUS_TIMEOUT_MS,
+  );
+  const abortFromCaller = () => controller.abort(signal.reason);
+  if (signal?.aborted) {
+    abortFromCaller();
+  } else {
+    signal?.addEventListener("abort", abortFromCaller, { once: true });
   }
-  if (!response.ok) {
-    throw new Error(`Could not check your sign-in status (HTTP ${response.status}).`);
+
+  try {
+    const response = await fetch(apiUrl("/api/auth/me"), {
+      credentials: "include",
+      signal: controller.signal,
+    });
+    if (response.status === 401) {
+      return null;
+    }
+    if (!response.ok) {
+      throw new Error(
+        `Could not check your sign-in status (HTTP ${response.status}).`,
+      );
+    }
+    return response.json();
+  } catch (error) {
+    if (controller.signal.aborted && !signal?.aborted) {
+      throw new Error(
+        "Checking your sign-in status timed out. Please try again.",
+      );
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+    signal?.removeEventListener("abort", abortFromCaller);
   }
-  return response.json();
 }
 
 export async function registerUser(credentials) {
@@ -92,6 +121,7 @@ export async function logoutUser() {
 }
 
 export async function saveWork(work) {
+  // This sends the catalog record; local book contents are never part of the request.
   return postJson("/api/works", work, "Saving the work", true);
 }
 
@@ -130,6 +160,22 @@ export async function fetchWorks(search = "", filters = {}) {
     throw new Error("The works response was not in the expected format.");
   }
   return works;
+}
+
+export async function fetchLibraryExport() {
+  // The backend scopes this metadata-only export to the signed-in account.
+  const response = await fetch(apiUrl("/api/works/export.xlsx"), {
+    credentials: "include",
+  });
+  if (!response.ok) {
+    const result = await response.json().catch(() => null);
+    throw new Error(
+      typeof result?.detail === "string"
+        ? result.detail
+        : `Could not export your library (HTTP ${response.status}).`,
+    );
+  }
+  return response.blob();
 }
 
 export async function fetchFilterOptions() {

@@ -41,6 +41,7 @@ class LocalFileImport(BaseModel):
     file_format: Literal["EPUB", "PDF"]
     file_size: int = Field(ge=1, le=100 * 1024 * 1024)
     checksum: str = Field(pattern=r"^[0-9a-fA-F]{64}$")
+    fingerprint_version: Literal[1, 2] = 1
     storage_provider: Literal["local"] = "local"
 
     @field_validator("original_filename")
@@ -54,7 +55,14 @@ class LocalFileImport(BaseModel):
     @model_validator(mode="after")
     def filename_matches_format(self) -> "LocalFileImport":
         expected_extension = f".{self.file_format.lower()}"
-        if not self.original_filename.lower().endswith(expected_extension):
+        is_wrapped_epub = (
+            self.file_format == "EPUB"
+            and self.original_filename.lower().endswith(".epub.zip")
+        )
+        if (
+            not self.original_filename.lower().endswith(expected_extension)
+            and not is_wrapped_epub
+        ):
             raise ValueError("The filename extension does not match the file format.")
         return self
 
@@ -125,6 +133,7 @@ class WorkFileRead(BaseModel):
     file_format: str
     file_size: int
     checksum: Optional[str]
+    fingerprint_version: int
     storage_provider: str
     status: str
     created_at: datetime

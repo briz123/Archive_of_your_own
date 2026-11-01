@@ -1,17 +1,27 @@
 import { useEffect, useRef, useState } from "react";
 
 import { saveWork } from "../services/api.js";
-import { extractMetadata } from "../services/metadata/index.js";
+import {
+  calculateFingerprint,
+  extractMetadata,
+} from "../services/metadata/index.js";
 
 function UploadForm({ onSaved }) {
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]);
+  const [fileIndex, setFileIndex] = useState(0);
   const [metadata, setMetadata] = useState(null);
   const [extracting, setExtracting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [completedCount, setCompletedCount] = useState(0);
+  const [batchTotal, setBatchTotal] = useState(0);
   const [error, setError] = useState("");
   const inputRef = useRef(null);
+  const file = files[fileIndex] ?? null;
   const [coverPreviewUrl, setCoverPreviewUrl] = useState("");
+  const directorySelectionSupported =
+    typeof window !== "undefined" &&
+    typeof window.showDirectoryPicker === "function";
 
   useEffect(() => {
     if (!metadata?.coverImage) {
@@ -34,6 +44,7 @@ function UploadForm({ onSaved }) {
       return;
     }
 
+    // Previewing reads the selected file in this browser; it does not save it to AYO.
     setExtracting(true);
     setError("");
     setMetadata(null);
@@ -43,6 +54,37 @@ function UploadForm({ onSaved }) {
       setError(extractionError.message || "The file metadata could not be extracted.");
     } finally {
       setExtracting(false);
+    }
+  }
+
+  function handleFileChange(event) {
+    const selectedFiles = Array.from(event.currentTarget.files ?? []);
+    event.currentTarget.value = "";
+    setFiles(selectedFiles);
+    setFileIndex(0);
+    setMetadata(null);
+    setSaved(false);
+    setCompletedCount(0);
+    setBatchTotal(selectedFiles.length);
+    setError("");
+  }
+
+  async function handleDirectorySelection() {
+    try {
+      const directory = await window.showDirectoryPicker({ mode: "read" });
+      setFiles([directory]);
+      setFileIndex(0);
+      setMetadata(null);
+      setSaved(false);
+      setCompletedCount(0);
+      setBatchTotal(1);
+      setError("");
+    } catch (selectionError) {
+      if (selectionError.name !== "AbortError") {
+        setError(
+          "The folder could not be selected. Try Chrome, or choose a standard EPUB file.",
+        );
+      }
     }
   }
 
@@ -62,34 +104,70 @@ function UploadForm({ onSaved }) {
         ["Rating", metadata.rating],
         ["Category", metadata.category],
         ["Archive warnings", metadata.archiveWarnings.join(", ") || null],
+        [
+          "EPUB structure",
+          metadata.validationWarnings?.join(" ") || null,
+        ],
       ].filter(([, value]) => value)
     : [];
 
   return (
     <section className="upload-section" aria-labelledby="upload-heading">
-      <h2 id="upload-heading">Inspect a file</h2>
-      <p>Choose an EPUB or PDF to extract its available metadata in your browser.</p>
+      <h2 id="upload-heading">Catalog a book</h2>
+      <p>
+        Choose EPUB or PDF files to preview their details in your browser.
+        Nothing is saved until you choose to add the catalog details to your
+        library.
+      </p>
       <p className="prototype-notice">
-        The file is read locally. Only its extracted metadata and fingerprint
-        are saved; the original is not sent to AYO.
+        AYO saves the metadata and a locally calculated file fingerprint to
+        your account—not the book itself. The EPUB or PDF is never uploaded and
+        stays on this device. PDF is still in beta. EPUB folders are supported
+        in Chrome, but not Safari.
       </p>
       <form className="upload-form" onSubmit={handleSubmit}>
-        <label htmlFor="work-upload">Choose an EPUB or PDF file</label>
+        <label htmlFor="work-upload">Choose one or more EPUB or PDF files</label>
         <input
           ref={inputRef}
           id="work-upload"
           type="file"
           accept=".epub,.pdf,application/epub+zip,application/pdf"
-          onChange={(event) => {
-            setFile(event.target.files?.[0] || null);
-            setMetadata(null);
-            setSaved(false);
-            setError("");
-          }}
+          multiple
+          onChange={handleFileChange}
           disabled={extracting || saving}
         />
+        {directorySelectionSupported ? (
+          <button
+            type="button"
+            onClick={handleDirectorySelection}
+            disabled={extracting || saving}
+          >
+            Choose an EPUB folder
+          </button>
+        ) : (
+          <p>
+            Unpacked EPUB folders can be selected in Chrome. Safari supports
+            standard EPUB files.
+          </p>
+        )}
+        {file && (
+          <p className="selected-file">
+            {file.kind === "directory"
+              ? `Selected folder: ${file.name}`
+              : files.length > 1
+                ? `File ${fileIndex + 1} of ${files.length}: ${file.name}`
+                : `Selected file: ${file.name}`}
+          </p>
+        )}
+        {batchTotal > 1 && completedCount > 0 && (
+          <p className="upload-success" role="status">
+            {completedCount === batchTotal
+              ? `Saved catalog details for all ${batchTotal} selected files. No book files were uploaded.`
+              : `Saved catalog details for ${completedCount} of ${batchTotal} selected files. No book files were uploaded.`}
+          </p>
+        )}
         <button type="submit" disabled={!file || extracting || saving}>
-          {extracting ? "Reading metadata..." : "Extract metadata"}
+          {extracting ? "Reading metadata..." : "Preview metadata"}
         </button>
       </form>
       {error && <p className="upload-error" role="alert">{error}</p>}
@@ -97,8 +175,8 @@ function UploadForm({ onSaved }) {
         <section className="metadata-preview" aria-live="polite">
           <p className="upload-success" role="status">
             {saved
-              ? `${metadata.fileName} was added to your library. The file remains on your computer.`
-              : `Metadata extracted from ${metadata.fileName}. The file remains on your computer.`}
+              ? `Catalog details for ${metadata.fileName} are saved to your library. The file itself was not uploaded and stays on this device.`
+              : `Metadata preview for ${metadata.fileName}. Nothing has been saved yet; the file stays on this device.`}
           </p>
           <h3>{metadata.title || "Untitled work"}</h3>
           {coverPreviewUrl && (
@@ -137,20 +215,13 @@ function UploadForm({ onSaved }) {
                 setSaving(true);
                 setError("");
                 try {
-                  if (!globalThis.crypto?.subtle) {
-                    throw new Error(
-                      "This browser cannot calculate a file fingerprint. Use a secure browser connection and try again.",
-                    );
-                  }
-                  const digest = await globalThis.crypto.subtle.digest(
-                    "SHA-256",
-                    await file.arrayBuffer(),
+                  // Send catalog metadata and a local fingerprint, never the book bytes.
+                  const fingerprint = await calculateFingerprint(
+                    file,
+                    metadata.format,
                   );
-                  const checksum = Array.from(new Uint8Array(digest), (byte) =>
-                    byte.toString(16).padStart(2, "0"),
-                  ).join("");
                   await saveWork({
-                    title: metadata.title || file.name.replace(/\.(epub|pdf)$/i, ""),
+                    title: metadata.title || metadata.fileName.replace(/\.(epub|pdf)$/i, ""),
                     original_author: metadata.author,
                     description: metadata.description,
                     language: metadata.language,
@@ -170,17 +241,27 @@ function UploadForm({ onSaved }) {
                     })),
                     warnings: metadata.archiveWarnings,
                     file: {
-                      original_filename: file.name,
+                      original_filename: metadata.fileName,
                       file_format: metadata.format,
-                      file_size: file.size,
-                      checksum,
+                      file_size: fingerprint.fileSize,
+                      checksum: fingerprint.checksum,
+                      fingerprint_version: fingerprint.fingerprintVersion,
                       storage_provider: "local",
                     },
                   });
-                  setSaved(true);
-                  setFile(null);
-                  if (inputRef.current) {
-                    inputRef.current.value = "";
+                  const nextCompletedCount = completedCount + 1;
+                  const hasNextFile = fileIndex + 1 < files.length;
+                  setCompletedCount(nextCompletedCount);
+                  setSaved(!hasNextFile);
+                  if (hasNextFile) {
+                    setFileIndex((currentIndex) => currentIndex + 1);
+                    setMetadata(null);
+                  } else {
+                    setFiles([]);
+                    setFileIndex(0);
+                    if (inputRef.current) {
+                      inputRef.current.value = "";
+                    }
                   }
                   onSaved?.();
                 } catch (saveError) {
@@ -190,7 +271,7 @@ function UploadForm({ onSaved }) {
                 }
               }}
             >
-              {saving ? "Saving to library..." : "Add to my library"}
+              {saving ? "Saving catalog details..." : "Save catalog details"}
             </button>
           )}
         </section>
