@@ -291,39 +291,31 @@ from AYO because the application does not retain those files. Earlier
 server-stored files, if any, are not automatically removed by this code change;
 clean up old deployment storage separately if needed.
 
-## Deploy the backend to Render
+## Deploy the app to Render
 
-The root `render.yaml` configures the existing FastAPI application as a Render
-web service. It installs `backend/requirements.txt`, runs
-`uvicorn app.main:app --host 0.0.0.0 --port $PORT`, and checks
-`/api/health`. Link the repository to Render and create the service from the
-Blueprint. In the service environment, provide `DATABASE_URL` privately for
-your existing PostgreSQL database. The database must be reachable from Render;
-a database running only on your computer will not work. Apply migrations with
-`alembic upgrade head` from the backend directory before using the API. The
-application normalizes Render's `postgres://` URL prefix for SQLAlchemy.
+The root `render.yaml` and `Dockerfile` configure one Render web service to
+build the React frontend and run it alongside FastAPI. The app is served at
+`/`, API routes remain under `/api/`, and `/api/health` checks the backend and
+database. Because the frontend and API share the Render origin, the session
+cookie is first-party and uses `Secure` with `SameSite=Lax`.
 
-The Pages build reads the repository Actions variable `VITE_API_BASE_URL`.
-After Render creates the service, set it to the full service origin, such as
-`https://your-service.onrender.com` (no trailing slash), under
-**Settings → Secrets and variables → Actions → Variables**, then rerun the
-Pages workflow. Render is configured to trust
-`https://briz123.github.io`; cookies are configured for HTTPS cross-site
-requests.
+In Render, apply the Blueprint to the existing service and keep its existing
+`DATABASE_URL` value so the deployed library data is preserved. The database
+must be reachable from Render; a database running only on your computer will
+not work. If Render requires a replacement web service to switch the existing
+Python service to Docker, configure it with the same `DATABASE_URL`; do not
+replace the PostgreSQL database. Update `TRUSTED_FRONTEND_ORIGINS` to include
+the exact new Render origin if the service URL changes. Before using code that
+depends on a new schema, connect to the database and apply migrations from
+`backend/` with `alembic upgrade head`. The application normalizes Render's
+`postgres://` URL prefix for SQLAlchemy.
 
-If sign-in reports an HTTP 404 while checking your status, verify that
-`VITE_API_BASE_URL` is the backend's origin only (not the Pages URL and not an
-origin with `/api` appended), then redeploy the Pages site. The backend health
-check should respond at `<backend-origin>/api/health`. A signed-out session
-check at `<backend-origin>/api/auth/me` should return HTTP 401, not 404.
-
-Important: the Pages site and a Render `onrender.com` service are different
-sites. Browsers that block third-party cookies may prevent cookie-based login
-even with `SameSite=None`. For reliable authentication across browsers, use a
-custom domain arrangement that puts the frontend and API on the same site, or
-choose a hosting/proxy setup that makes API requests same-origin. GitHub Pages
-and Render can serve the frontend and API separately, but this browser cookie
-limitation cannot be fixed by CORS configuration alone.
+After deployment, use the Render service URL (currently
+`https://archive-of-your-own.onrender.com`) for the app. Check
+`/api/health` there; the root URL should load the frontend. The GitHub Pages
+site can remain published, but it is hosted on a different site from the API.
+Mobile browsers may block its cross-site session cookies, so use the Render
+URL for reliable sign-in and library access.
 
 ## GitHub Pages
 
@@ -333,9 +325,10 @@ by the `Deploy frontend to GitHub Pages` workflow whenever changes reach
 source to **GitHub Actions**. The workflow builds the Vite app with the
 repository subpath configured for project Pages.
 
-GitHub Pages hosts only static files. Login, saving works, and library search
-also require the FastAPI/PostgreSQL backend to be deployed and configured;
-they are not provided by GitHub Pages itself.
+GitHub Pages hosts only static files and continues to use the configured
+`VITE_API_BASE_URL`. Since it and the Render API have different origins, some
+browsers block its cross-site session cookies. For reliable account and library
+access on phones, use the same-origin Render app URL instead.
 
 ## Test
 
