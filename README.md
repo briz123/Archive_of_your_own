@@ -22,11 +22,11 @@ AYO aims to provide:
 - File relinking after files are moved or replaced.
 - Export of library metadata.
 
-During import, AYO should temporarily read the selected file, extract available
-metadata, calculate a fingerprint for duplicate detection, and let the user
-review and edit the result. Only the work's metadata should be saved to
-PostgreSQL. The original book should remain on the user's computer and should
-not be permanently uploaded to AYO's server.
+When cataloging a book, AYO reads the selected file in the browser to extract
+and preview its metadata. Nothing is saved until the user chooses to add the
+catalog entry. AYO then saves the metadata and a locally calculated fingerprint
+for duplicate detection to PostgreSQL; the original book stays on the user's
+computer and is never uploaded to AYO's server.
 
 ## What AYO is not
 
@@ -113,9 +113,10 @@ Where available, imported work metadata should retain:
 AYO is under development. The current prototype uses React, Python/FastAPI,
 PostgreSQL, SQLAlchemy, and Alembic. Email/password accounts and owner-scoped
 library APIs are implemented. EPUB and PDF metadata extraction now runs in the
-browser and does not upload the selected file. Saving an import creates a
-private work record and local-file metadata record. The backend has no
-server-side book upload or download routes.
+browser and does not upload the selected file. Saving catalog details creates
+a private work record and a local-file record containing metadata about the
+file, not its contents. The backend has no server-side book upload or download
+routes.
 
 The prototype is experimental and should not be relied upon as the sole catalog
 or backup of any work.
@@ -174,6 +175,12 @@ archive; PDF properties are read using Mozilla PDF.js. Both operate on the
 selected file bytes in the browser. Multiple EPUB and PDF files can be selected
 together; each file is processed and reviewed in sequence before its metadata
 and locally computed SHA-256 fingerprint are saved.
+
+The Library page also provides a **Download for Google Sheets** action. It
+downloads a Google Sheets-compatible `.xlsx` workbook with **Read Me**,
+**All Works**, and **Tags** sheets; open or upload the file in Google Sheets.
+Export data is fetched through the authenticated, owner-scoped works API; the
+workbook contains metadata only, not book contents.
 
 Supported EPUB fields include title, author, description, language, publisher,
 publication date, identifier, cover, subject-derived fandom/character/

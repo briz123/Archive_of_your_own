@@ -112,14 +112,17 @@ function UploadForm({ onSaved }) {
 
   return (
     <section className="upload-section" aria-labelledby="upload-heading">
-      <h2 id="upload-heading">Import books</h2>
+      <h2 id="upload-heading">Catalog a book</h2>
       <p>
-        Choose one or more EPUB or PDF files, or select an EPUB folder.
-        Selected files are processed one at a time for review in your browser.
+        Choose EPUB or PDF files to preview their details in your browser.
+        Nothing is saved until you choose to add the catalog details to your
+        library.
       </p>
       <p className="prototype-notice">
-        The file is read locally. Only its extracted metadata and fingerprint
-        are saved; the original is not sent to AYO.
+        AYO saves the metadata and a locally calculated file fingerprint to
+        your account—not the book itself. The EPUB or PDF is never uploaded and
+        stays on this device. PDF is still in beta. EPUB folders are supported
+        in Chrome, but not Safari.
       </p>
       <form className="upload-form" onSubmit={handleSubmit}>
         <label htmlFor="work-upload">Choose one or more EPUB or PDF files</label>
@@ -158,12 +161,12 @@ function UploadForm({ onSaved }) {
         {batchTotal > 1 && completedCount > 0 && (
           <p className="upload-success" role="status">
             {completedCount === batchTotal
-              ? `Imported all ${batchTotal} selected files.`
-              : `Imported ${completedCount} of ${batchTotal} selected files.`}
+              ? `Saved catalog details for all ${batchTotal} selected files. No book files were uploaded.`
+              : `Saved catalog details for ${completedCount} of ${batchTotal} selected files. No book files were uploaded.`}
           </p>
         )}
         <button type="submit" disabled={!file || extracting || saving}>
-          {extracting ? "Reading metadata..." : "Extract metadata"}
+          {extracting ? "Reading metadata..." : "Preview metadata"}
         </button>
       </form>
       {error && <p className="upload-error" role="alert">{error}</p>}
@@ -171,8 +174,8 @@ function UploadForm({ onSaved }) {
         <section className="metadata-preview" aria-live="polite">
           <p className="upload-success" role="status">
             {saved
-              ? `${metadata.fileName} was added to your library. The file remains on your computer.`
-              : `Metadata extracted from ${metadata.fileName}. The file remains on your computer.`}
+              ? `Catalog details for ${metadata.fileName} are saved to your library. The file itself was not uploaded and stays on this device.`
+              : `Metadata preview for ${metadata.fileName}. Nothing has been saved yet; the file stays on this device.`}
           </p>
           <h3>{metadata.title || "Untitled work"}</h3>
           {coverPreviewUrl && (
@@ -266,7 +269,7 @@ function UploadForm({ onSaved }) {
                 }
               }}
             >
-              {saving ? "Saving to library..." : "Add to my library"}
+              {saving ? "Saving catalog details..." : "Save catalog details"}
             </button>
           )}
         </section>

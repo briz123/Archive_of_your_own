@@ -106,6 +106,9 @@ describe("UploadForm file selection", () => {
     root = createRoot(container);
     await act(async () => root.render(createElement(UploadForm)));
 
+    expect(container.textContent).toContain(
+      "AYO saves the metadata and a locally calculated file fingerprint to your account—not the book itself.",
+    );
     await act(async () => {
       [...container.querySelectorAll("button")]
         .find((button) => button.textContent.includes("Choose an EPUB folder"))
@@ -116,13 +119,17 @@ describe("UploadForm file selection", () => {
       container.querySelector('button[type="submit"]').click();
     });
     expect(extractMetadata).toHaveBeenCalledWith(directoryHandle);
+    expect(container.textContent).toContain(
+      "Nothing has been saved yet; the file stays on this device.",
+    );
     await act(async () => {
       [...container.querySelectorAll("button")]
-        .find((button) => button.textContent.includes("Add to my library"))
+        .find((button) => button.textContent.includes("Save catalog details"))
         .click();
     });
 
     expect(calculateFingerprint).toHaveBeenCalledWith(directoryHandle, "EPUB");
+    expect(container.textContent).toContain("The file itself was not uploaded");
     expect(saveWork).toHaveBeenCalledWith(
       expect.objectContaining({
         file: expect.objectContaining({
@@ -182,7 +189,7 @@ describe("UploadForm file selection", () => {
     });
     await act(async () => {
       [...container.querySelectorAll("button")]
-        .find((button) => button.textContent.includes("Add to my library"))
+        .find((button) => button.textContent.includes("Save catalog details"))
         .click();
     });
 
@@ -200,7 +207,7 @@ describe("UploadForm file selection", () => {
     expect(extractMetadata).toHaveBeenNthCalledWith(2, secondFile);
     await act(async () => {
       [...container.querySelectorAll("button")]
-        .find((button) => button.textContent.includes("Add to my library"))
+        .find((button) => button.textContent.includes("Save catalog details"))
         .click();
     });
 
@@ -261,12 +268,14 @@ describe("UploadForm file selection", () => {
     expect(extractMetadata).toHaveBeenNthCalledWith(1, firstFile);
     await act(async () => {
       [...container.querySelectorAll("button")]
-        .find((button) => button.textContent.includes("Add to my library"))
+        .find((button) => button.textContent.includes("Save catalog details"))
         .click();
     });
 
     expect(saveWork).toHaveBeenCalledOnce();
-    expect(container.textContent).toContain("Imported 1 of 2 selected files.");
+    expect(container.textContent).toContain(
+      "Saved catalog details for 1 of 2 selected files. No book files were uploaded.",
+    );
     expect(container.textContent).toContain("File 2 of 2: second.pdf");
     await act(async () => {
       container.querySelector('button[type="submit"]').click();
@@ -274,12 +283,16 @@ describe("UploadForm file selection", () => {
     expect(extractMetadata).toHaveBeenNthCalledWith(2, secondFile);
     await act(async () => {
       [...container.querySelectorAll("button")]
-        .find((button) => button.textContent.includes("Add to my library"))
+        .find((button) => button.textContent.includes("Save catalog details"))
         .click();
     });
 
     expect(saveWork).toHaveBeenCalledTimes(2);
-    expect(container.textContent).toContain("Imported all 2 selected files.");
-    expect(container.textContent).toContain("second.pdf was added to your library.");
+    expect(container.textContent).toContain(
+      "Saved catalog details for all 2 selected files. No book files were uploaded.",
+    );
+    expect(container.textContent).toContain(
+      "Catalog details for second.pdf are saved to your library.",
+    );
   });
 });
