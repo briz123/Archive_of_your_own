@@ -1,7 +1,9 @@
 import hashlib
+from io import BytesIO
 from typing import Optional
 from uuid import uuid4
 
+from openpyxl import load_workbook
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
 
@@ -214,8 +216,11 @@ def test_work_endpoints_only_return_records_owned_by_signed_in_user(
     client: TestClient,
     anonymous_client: TestClient,
 ) -> None:
+    owner_response = client.get("/api/auth/me")
+    assert owner_response.status_code == 200, owner_response.text
+    owner_id = owner_response.json()["id"]
+    assert anonymous_client.get("/api/works/export.xlsx").status_code == 401
     _, _, other_user_id, _ = register_account(anonymous_client)
-    owner_id = client.get("/api/auth/me").json()["id"]
     with SessionLocal() as db:
         work = Work(user_id=owner_id, title="Private fixture work")
         db.add(work)
@@ -224,6 +229,32 @@ def test_work_endpoints_only_return_records_owned_by_signed_in_user(
 
     try:
         assert anonymous_client.get("/api/works").json() == []
+        assert anonymous_client.get(
+            "/api/works", params={"page": 1, "page_size": 100}
+        ).json() == []
+        other_user_export = anonymous_client.get("/api/works/export.xlsx")
+        owner_export = client.get("/api/works/export.xlsx")
+        assert other_user_export.status_code == 200
+        assert owner_export.status_code == 200
+        assert other_user_export.headers["content-type"].startswith(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        other_workbook = load_workbook(BytesIO(other_user_export.content))
+        owner_workbook = load_workbook(BytesIO(owner_export.content))
+        assert other_workbook.sheetnames == ["Read Me", "All Works", "Tags"]
+        assert owner_workbook.sheetnames == ["Read Me", "All Works", "Tags"]
+        assert not any(
+            row[0] == work_id
+            for row in other_workbook["All Works"].iter_rows(
+                min_row=2, values_only=True
+            )
+        )
+        assert any(
+            row[0] == work_id
+            for row in owner_workbook["All Works"].iter_rows(
+                min_row=2, values_only=True
+            )
+        )
         assert anonymous_client.get(f"/api/works/{work_id}").status_code == 404
         assert (
             anonymous_client.put(

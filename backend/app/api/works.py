@@ -4,10 +4,12 @@ from pathlib import PurePath
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.library_export import build_library_workbook
 from app.database import get_db
 from app.config import ADVANCED_SEARCH_ENABLED
 from app.models import (
@@ -80,6 +82,26 @@ def _tag_search_condition(term: str):
     return or_(
         Tag.name.icontains(term, autoescape=True),
         matching_alias,
+    )
+
+
+@router.get("/export.xlsx")
+def export_library(
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+) -> Response:
+    statement = (
+        select(Work)
+        .options(*_work_options())
+        .where(Work.user_id == user.id)
+    )
+    works = list(db.scalars(statement).all())
+    generated_at = datetime.now().astimezone()
+    filename = f"AYO_Library_{generated_at:%Y-%m-%d}.xlsx"
+    return Response(
+        content=build_library_workbook(works, generated_at),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

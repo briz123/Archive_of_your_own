@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import {
   fetchCurrentUser,
   fetchFilterOptions,
+  fetchLibraryExport,
   fetchWorks,
   logoutUser,
 } from "./services/api.js";
@@ -18,6 +19,7 @@ function App() {
   );
   const [authUser, setAuthUser] = useState(null);
   const [authStatus, setAuthStatus] = useState("checking");
+  const [authCheckRetry, setAuthCheckRetry] = useState(0);
   const [authError, setAuthError] = useState("");
   const [loggingOut, setLoggingOut] = useState(false);
   const [acceptanceError, setAcceptanceError] = useState("");
@@ -31,6 +33,8 @@ function App() {
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
   const [retryCount, setRetryCount] = useState(0);
+  const [exportingLibrary, setExportingLibrary] = useState(false);
+  const [libraryExportError, setLibraryExportError] = useState("");
   const advancedSearchEnabled = filterOptions?.advanced_search_enabled === true;
 
   useEffect(() => {
@@ -41,12 +45,14 @@ function App() {
       };
     }
 
+    const controller = new AbortController();
     setAuthStatus("checking");
-    fetchCurrentUser()
+    fetchCurrentUser(controller.signal)
       .then((user) => {
         if (active) {
           setAuthUser(user);
           setAuthStatus(user ? "authenticated" : "unauthenticated");
+          setAuthError("");
         }
       })
       .catch((loadError) => {
@@ -59,8 +65,9 @@ function App() {
 
     return () => {
       active = false;
+      controller.abort();
     };
-  }, [acceptedDisclaimer]);
+  }, [acceptedDisclaimer, authCheckRetry]);
 
   useEffect(() => {
     let active = true;
@@ -146,6 +153,37 @@ function App() {
     setFandomQuery("");
   }
 
+  async function handleExportLibrary() {
+    if (exportingLibrary) {
+      return;
+    }
+    setExportingLibrary(true);
+    setLibraryExportError("");
+    try {
+      const blob = await fetchLibraryExport();
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      const now = new Date();
+      const date = [
+        now.getFullYear(),
+        String(now.getMonth() + 1).padStart(2, "0"),
+        String(now.getDate()).padStart(2, "0"),
+      ].join("-");
+      link.download = `AYO_Library_${date}.xlsx`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 0);
+    } catch (exportError) {
+      setLibraryExportError(
+        exportError.message || "The library export could not be generated.",
+      );
+    } finally {
+      setExportingLibrary(false);
+    }
+  }
+
   function acceptDisclaimer() {
     try {
       sessionStorage.setItem("ayo-disclaimer-accepted", "true");
@@ -193,14 +231,14 @@ function App() {
   return (
     <div className="site-shell">
       <header className="site-header">
-        <a className="site-brand" href="/" aria-label="Archive of Your Own home">
+        <a className="site-brand" href="https://briz123.github.io/Archive_of_your_own/" aria-label="Archive of Your Own home">
           <span className="brand-mark" aria-hidden="true">AOY</span>
           <span className="brand-name">Archive <span>of Your Own</span></span>
         </a>
         {acceptedDisclaimer && authUser && (
           <nav className="site-nav" aria-label="Main navigation">
             <a href="#library">My library</a>
-            <a href="#upload">Import a file</a>
+            <a href="#upload">Catalog a book</a>
             <button type="button" onClick={handleLogout} disabled={loggingOut}>
               {loggingOut ? "Signing out..." : "Sign out"}
             </button>
@@ -274,7 +312,20 @@ function App() {
                 Sign in to manage your private catalog of fanfiction works.
               </p>
             </section>
-            {authError && <p className="auth-error" role="alert">{authError}</p>}
+            {authError && (
+              <>
+                <p className="auth-error" role="alert">{authError}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthError("");
+                    setAuthCheckRetry((count) => count + 1);
+                  }}
+                >
+                  Retry sign-in check
+                </button>
+              </>
+            )}
             <AuthForm onAuthenticated={handleAuthenticated} />
           </>
         ) : (
@@ -297,12 +348,31 @@ function App() {
                       <p className="eyebrow">The collection</p>
                       <h2>My library</h2>
                     </div>
-                    {status === "success" && works.length > 0 && (
-                      <span className="work-count">
-                        {works.length} {works.length === 1 ? "work" : "works"}
-                      </span>
-                    )}
+                    <div className="library-actions">
+                      {status === "success" && works.length > 0 && (
+                        <span className="work-count">
+                          {works.length} {works.length === 1 ? "work" : "works"}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleExportLibrary}
+                        disabled={status !== "success" || exportingLibrary}
+                      >
+                        {exportingLibrary
+                          ? "Preparing download..."
+                          : "Download for Google Sheets"}
+                      </button>
+                    </div>
                   </div>
+                  <p className="export-note">
+                    Downloads an .xlsx workbook you can open in Google Sheets.
+                  </p>
+                  {libraryExportError && (
+                    <div className="works-error" role="alert">
+                      <p>Library export failed: {libraryExportError}</p>
+                    </div>
+                  )}
                   <SearchBar
                     initialSearch={search}
                     onSearch={setSearch}
@@ -398,7 +468,7 @@ function App() {
                         Try changing your search or filters.
                       </p>
                     ) : (
-                      <p className="empty-state">Your library is empty. Import a file to start cataloging your collection.</p>
+                      <p className="empty-state">Your library is empty. Choose a book to preview its metadata, then save the catalog details to AYO. The book file stays on your device.</p>
                     ))}
                   {status === "success" && works.length > 0 && (
                     <div className="work-list">
@@ -414,7 +484,7 @@ function App() {
                 <div className="sidebar-note">
                   <span className="note-icon" aria-hidden="true">✦</span>
                   <h3>Your library, organized</h3>
-                  <p>Catalog your EPUB and PDF collection by adding work metadata to your library.</p>
+                  <p>Save metadata to organize your EPUB and PDF collection. The book files stay on your device.</p>
                 </div>
               </aside>
             </div>

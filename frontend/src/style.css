@@ -241,6 +241,20 @@ section {
   margin: 0 0 1.25rem;
 }
 
+.library-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+}
+
+.export-note {
+  margin: -0.65rem 0 1rem;
+  color: var(--color-muted);
+  font-size: 0.8rem;
+  text-align: right;
+}
+
 .prototype-notice {
   margin: 0.8rem 0;
   padding: 0.75rem;
