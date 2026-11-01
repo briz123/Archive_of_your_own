@@ -1,7 +1,10 @@
+from pathlib import Path
+
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -48,6 +51,17 @@ def health_check(db: Session = Depends(get_db)) -> dict[str, str]:
     return {"status": "ok", "message": "Connected to the AYO backend."}
 
 
+FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+if FRONTEND_DIST.is_dir():
+    app.mount(
+        "/assets",
+        StaticFiles(directory=FRONTEND_DIST / "assets"),
+        name="frontend-assets",
+    )
+
+    @app.get("/", include_in_schema=False)
+    def frontend_index() -> FileResponse:
+        return FileResponse(FRONTEND_DIST / "index.html")
 
 
 def main():

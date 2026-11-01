@@ -233,7 +233,7 @@ function App() {
   return (
     <div className="site-shell">
       <header className="site-header">
-        <a className="site-brand" href="https://briz123.github.io/Archive_of_your_own/" aria-label="Archive of Your Own home">
+        <a className="site-brand" href={import.meta.env.BASE_URL} aria-label="Archive of Your Own home">
           <span className="brand-mark" aria-hidden="true">AOY</span>
           <span className="brand-name">Archive <span>of Your Own</span></span>
         </a>
