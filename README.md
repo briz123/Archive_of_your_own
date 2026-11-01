@@ -1,3 +1,5 @@
+
+
 ## Archive of Your Own (AYO)
 
 AYO is a personal fanfiction library for cataloging, organizing, searching, and
@@ -58,6 +60,14 @@ within each user's library.
 File relinking, collections, and favorites are not implemented. Saving an
 import stores metadata and a SHA-256 fingerprint only; the selected file is
 not sent to the backend.
+
+<img width="1367" height="697" alt="Screenshot 2026-11-01 at 4 38 54 PM" src="https://github.com/user-attachments/assets/3506ccd4-5de1-4e7a-8e95-fb19301c37e0" />
+
+<img width="1367" height="697" alt="Screenshot 2026-11-01 at 4 39 32 PM" src="https://github.com/user-attachments/assets/443e96e6-0b89-4862-bd64-4302e6ded54d" />
+
+<img width="1367" height="697" alt="Screenshot 2026-11-01 at 4 40 08 PM" src="https://github.com/user-attachments/assets/4df21837-fd60-4496-9534-140383afc5b6" />
+
+<img width="1367" height="639" alt="Screenshot 2026-11-01 at 4 38 10 PM" src="https://github.com/user-attachments/assets/f3d6e4e6-c520-453a-bb2f-932ada5edee6" />
 
 ## Copyright & Content Disclaimer
 
