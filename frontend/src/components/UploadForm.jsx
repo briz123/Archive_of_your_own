@@ -44,6 +44,7 @@ function UploadForm({ onSaved }) {
       return;
     }
 
+    // Previewing reads the selected file in this browser; it does not save it to AYO.
     setExtracting(true);
     setError("");
     setMetadata(null);
@@ -214,6 +215,7 @@ function UploadForm({ onSaved }) {
                 setSaving(true);
                 setError("");
                 try {
+                  // Send catalog metadata and a local fingerprint, never the book bytes.
                   const fingerprint = await calculateFingerprint(
                     file,
                     metadata.format,

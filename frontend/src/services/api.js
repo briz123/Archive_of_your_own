@@ -60,6 +60,7 @@ async function postJson(url, body, label, requiresCsrf = false) {
 }
 
 export async function fetchCurrentUser(signal) {
+  // A stalled status request should not leave the application on its loading screen.
   const controller = new AbortController();
   const timeoutId = setTimeout(
     () => controller.abort(),
@@ -120,6 +121,7 @@ export async function logoutUser() {
 }
 
 export async function saveWork(work) {
+  // This sends the catalog record; local book contents are never part of the request.
   return postJson("/api/works", work, "Saving the work", true);
 }
 
@@ -161,6 +163,7 @@ export async function fetchWorks(search = "", filters = {}) {
 }
 
 export async function fetchLibraryExport() {
+  // The backend scopes this metadata-only export to the signed-in account.
   const response = await fetch(apiUrl("/api/works/export.xlsx"), {
     credentials: "include",
   });

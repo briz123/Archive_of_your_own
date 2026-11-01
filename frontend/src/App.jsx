@@ -37,6 +37,7 @@ function App() {
   const [libraryExportError, setLibraryExportError] = useState("");
   const advancedSearchEnabled = filterOptions?.advanced_search_enabled === true;
 
+  // Resolve the session cookie before requesting any user-scoped library data.
   useEffect(() => {
     let active = true;
     if (!acceptedDisclaimer) {
@@ -157,6 +158,7 @@ function App() {
     if (exportingLibrary) {
       return;
     }
+    // The exported workbook contains metadata only; the user's book files stay local.
     setExportingLibrary(true);
     setLibraryExportError("");
     try {

@@ -94,6 +94,7 @@ def _fandoms(work: Work):
 
 
 def _group_works(works: Iterable[Work]):
+    """Group by actual fandom tags; works with multiple fandoms appear once as crossovers."""
     groups = {}
     for work in works:
         fandoms = _fandoms(work)
@@ -241,6 +242,7 @@ def _work_values(work: Work, group_name: str, group_size: Optional[int]) -> list
 
 
 def _add_all_works_sheet(workbook: Workbook, works: list[Work]) -> None:
+    """Keep one row per work so the table remains sortable and filterable."""
     worksheet = workbook.create_sheet("All Works")
     worksheet.sheet_properties.tabColor = WINE
     _configure_data_sheet(worksheet, WORK_COLUMNS)
@@ -565,6 +567,7 @@ def build_library_workbook(
     works: list[Work],
     generated_at: Optional[datetime] = None,
 ) -> bytes:
+    """Build the metadata-only workbook with its reader guide as the opening sheet."""
     generated_at = generated_at or datetime.now(timezone.utc)
     workbook = Workbook()
     workbook.properties.creator = "Archive of Your Own"

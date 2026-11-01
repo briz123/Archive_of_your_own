@@ -90,6 +90,7 @@ def export_library(
     user: CurrentUser,
     db: Session = Depends(get_db),
 ) -> Response:
+    """Export this user's catalog metadata without reading or returning book files."""
     statement = (
         select(Work)
         .options(*_work_options())
@@ -128,6 +129,7 @@ def list_works(
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
 ) -> list[Work]:
+    """Return only the signed-in user's works, with optional search and filters."""
     advanced_filters = (
         tag_id,
         exclude_tag_id,
@@ -375,6 +377,7 @@ def import_work(
     user: CurrentUser,
     db: Session = Depends(get_db),
 ) -> Work:
+    """Save extracted catalog metadata and a local fingerprint, never file contents."""
     if body.file.fingerprint_version == 2:
         duplicate_file_id = db.scalar(
             select(WorkFile.id)
@@ -461,6 +464,7 @@ def update_work(
     user: CurrentUser,
     db: Session = Depends(get_db),
 ) -> Work:
+    """Update an owned catalog record; omitted tag and warning lists stay unchanged."""
     statement = (
         select(Work)
         .options(*_work_options())

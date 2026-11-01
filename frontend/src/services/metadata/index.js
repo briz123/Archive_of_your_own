@@ -16,6 +16,7 @@ function isDirectoryHandle(source) {
 }
 
 export async function extractMetadata(source) {
+  // Detect format from file contents so renamed files and incorrect MIME types do not mislead parsing.
   if (isDirectoryHandle(source)) {
     return extractEpubMetadata(source);
   }
@@ -39,6 +40,7 @@ export async function extractMetadata(source) {
 }
 
 export async function calculateFingerprint(source, format) {
+  // Calculate the duplicate-detection fingerprint locally; file contents stay in the browser.
   if (format === "EPUB") {
     return fingerprintEpub(source);
   }
