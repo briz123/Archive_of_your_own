@@ -42,6 +42,14 @@ catalog entry. AYO then saves the metadata and a locally calculated fingerprint
 for duplicate detection to PostgreSQL. The original book stays on the user's
 computer and is never uploaded to AYO's server.
 
+### Next steps in order of importance:
+- Users should be able to remove works from their library
+- Need to refine Google Sheets/Excel Export a lot
+- Could refine multi select of files
+- Need to do more advanced filtering 
+- Possibly add kudos as an option to filter by
+- PDF Extraction needs to be built out more to be usable
+
 ## What AYO is not
 
 AYO is not intended to provide:
