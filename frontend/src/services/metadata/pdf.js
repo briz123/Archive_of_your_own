@@ -1,3 +1,9 @@
+/*
+
+Extract metadata from PDF files.
+Not fully built out yet, but we can get the title, author, subject, and dates.
+*/
+
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 import {

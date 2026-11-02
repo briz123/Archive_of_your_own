@@ -68,18 +68,20 @@ class LocalFileImport(BaseModel):
 
 
 class WorkImport(BaseModel):
-    title: Optional[str] = Field(default=None, max_length=500)
-    original_author: Optional[str] = Field(default=None, max_length=500)
+    title: Optional[str] = Field(default=None, max_length=100)
+    original_author: Optional[str] = Field(default=None, max_length=100)
     description: Optional[str] = None
     language: Optional[str] = Field(default=None, max_length=50)
+    # Creator, producer, publisher are mainly for PDFs when we complete capability
     publisher: Optional[str] = Field(default=None, max_length=500)
     identifier: Optional[str] = Field(default=None, max_length=1000)
     subject: Optional[str] = None
     creator: Optional[str] = Field(default=None, max_length=500)
     producer: Optional[str] = Field(default=None, max_length=500)
     publication_date: Optional[str] = Field(default=None, max_length=100)
-    creation_date: Optional[str] = Field(default=None, max_length=100)
-    modification_date: Optional[str] = Field(default=None, max_length=100)
+    # Generous max lengths for dates because may contain an ISO Timestamp
+    creation_date: Optional[str] = Field(default=None, max_length=50)
+    modification_date: Optional[str] = Field(default=None, max_length=50)
     rating: Optional[Rating] = None
     category: Optional[WorkCategory] = None
     tags: list[TagInput] = Field(default_factory=list, max_length=100)
@@ -96,8 +98,8 @@ class WorkImport(BaseModel):
 
 
 class WorkUpdate(BaseModel):
-    title: Optional[str] = Field(default=None, min_length=1, max_length=500)
-    original_author: Optional[str] = Field(default=None, max_length=500)
+    title: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    original_author: Optional[str] = Field(default=None, max_length=100)
     description: Optional[str] = None
     language: Optional[str] = Field(default=None, max_length=50)
     publisher: Optional[str] = Field(default=None, max_length=500)
@@ -106,8 +108,8 @@ class WorkUpdate(BaseModel):
     creator: Optional[str] = Field(default=None, max_length=500)
     producer: Optional[str] = Field(default=None, max_length=500)
     publication_date: Optional[str] = Field(default=None, max_length=100)
-    creation_date: Optional[str] = Field(default=None, max_length=100)
-    modification_date: Optional[str] = Field(default=None, max_length=100)
+    creation_date: Optional[str] = Field(default=None, max_length=50)
+    modification_date: Optional[str] = Field(default=None, max_length=50)
     word_count: Optional[int] = Field(default=None, ge=0)
     chapter_count: Optional[int] = Field(default=None, ge=0)
     rating: Optional[Rating] = None

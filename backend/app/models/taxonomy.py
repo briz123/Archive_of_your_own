@@ -19,7 +19,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
-
+# Listed in the Epub as so:
 class TagType(str, Enum):
     FANDOM = "fandom"
     CHARACTER = "character"
@@ -73,7 +73,7 @@ work_warnings = Table(
     ),
 )
 
-
+# I want to change how we show tags in the filter but that will be a decision I have to make
 class Tag(Base):
     __tablename__ = "tags"
     __table_args__ = (

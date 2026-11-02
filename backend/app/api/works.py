@@ -2,13 +2,11 @@ from datetime import datetime
 from enum import Enum
 from pathlib import PurePath
 from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
-
 from app.library_export import build_library_workbook
 from app.database import get_db
 from app.config import ADVANCED_SEARCH_ENABLED
@@ -28,7 +26,8 @@ from app.schemas.work import TagInput, WorkImport, WorkRead, WorkUpdate
 
 router = APIRouter(prefix="/api/works", tags=["works"])
 
-
+"""Sorting Capabilities for the works list endpoint, Like Ao3 I'm going off of date,word,count, etc
+Not going off of kudos for now but maybe in the future"""
 class WorkSort(str, Enum):
     RECENTLY_UPDATED = "recently_updated"
     RECENTLY_ADDED = "recently_added"
@@ -50,7 +49,7 @@ class TagOption(BaseModel):
     is_canonical: bool
     aliases: list[str]
 
-
+"""Keeping filtering simple for now in the future I may add more advanced option"""
 class FilterOptions(BaseModel):
     advanced_search_enabled: bool
     fandoms: list[FandomOption]
@@ -69,7 +68,7 @@ def _work_options():
         selectinload(Work.warnings),
     )
 
-
+"""Ignore capitalization for tags"""
 def _tag_search_condition(term: str):
     matching_alias = (
         select(TagAlias.id)
@@ -84,7 +83,8 @@ def _tag_search_condition(term: str):
         matching_alias,
     )
 
-
+# Most recent work for the excel export
+# 
 @router.get("/export.xlsx")
 def export_library(
     user: CurrentUser,
@@ -109,7 +109,7 @@ def export_library(
 @router.get("", response_model=list[WorkRead])
 def list_works(
     user: CurrentUser,
-    search: Optional[str] = Query(default=None, max_length=200),
+    search: Optional[str] = Query(default=None, max_length=50),
     fandom_id: Optional[list[int]] = Query(default=None),
     tag_id: Optional[list[int]] = Query(default=None),
     exclude_tag_id: Optional[list[int]] = Query(default=None),
@@ -124,6 +124,7 @@ def list_works(
     exclude_warning: Optional[list[ArchiveWarningType]] = Query(default=None),
     completion_status: Optional[list[str]] = Query(default=None),
     language: Optional[list[str]] = Query(default=None),
+    #For now have default sort be recently added
     sort: WorkSort = Query(default=WorkSort.RECENTLY_ADDED),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
@@ -316,7 +317,7 @@ def get_filter_options(
         "languages": list(languages),
     }
 
-
+# Return work by Id but only if user is logged in
 @router.get("/{work_id}", response_model=WorkRead)
 def get_work(
     work_id: int,
@@ -456,9 +457,10 @@ def import_work(
     db.commit()
     return get_work(work.id, user, db)
 
-
+"""This is for future use so users could update a work if something went wrong for the metadata extraction"""
 @router.put("/{work_id}", response_model=WorkRead)
 def update_work(
+    #Based off of work id and user id
     work_id: int,
     changes: WorkUpdate,
     user: CurrentUser,
