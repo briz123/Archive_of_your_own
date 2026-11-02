@@ -1,3 +1,15 @@
+/*
+EPUB Metadata Extraction Service
+
+EPUBs are surprisingly complex, and there are many ways that metadata can be stored in an EPUB.
+
+The first issue I noticed is that while some EPUBs extracted normally others did not.
+While in Finder they showed as epub and as a singular file some would eventually return with a .zip extension.
+So obviously they had a directory structure and had to be handled as such.
+Not completely shocking but difficult to handle and not what I had expected.
+The solution is to check the first 4 bytes of the file and if they are not the expected PK signature then we can assume it is a folder.
+We only need the metadata, so we get the xhml file ending in _000 which contains that and extract from there.
+*/
 import { unzip } from "fflate";
 
 import {
@@ -815,6 +827,7 @@ function parseSubjects(document, metadata) {
   }
 }
 
+// _000.xhtml or titlepage.html/xhtml - title page
 function findTitlePagePath(packageDocument, packagePath) {
   const references = descendantsByLocalName(packageDocument, "reference")
     .filter((element) =>
@@ -888,7 +901,9 @@ function titlePageLandmarkPath(document, navigationPath) {
   return null;
 }
 
+
 function parseTitlePageTags(document) {
+  // labels must account for aliases and plural forms
   const labels = new Map([
     ["fandom", "fandom"],
     ["fandoms", "fandom"],
@@ -998,8 +1013,11 @@ async function readTitlePageTags(source, packageDocument, packagePath) {
   return parseTitlePageTags(parseXml(decodeXml(bytes)));
 }
 
+/* Get Cover image if it exists.
+This is something EPUB files can specify but I doubt we will use this unless someone edited their EPUB. */
 function parseCoverReference(document) {
   const manifestItems = descendantsByLocalName(document, "item");
+  // Meta tag would be "cover"
   const coverMeta = descendantsByLocalName(document, "meta").find(
     (element) => element.getAttribute("name")?.toLowerCase() === "cover",
   );

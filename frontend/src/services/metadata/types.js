@@ -51,6 +51,6 @@ export function validateFile(file) {
     throw new MetadataExtractionError("The selected file is empty.");
   }
   if (file.size > MAX_IMPORT_FILE_SIZE_BYTES) {
-    throw new MetadataExtractionError("The selected file exceeds the 100 MiB limit.");
+    throw new MetadataExtractionError("The selected file exceeds the 100 MB limit.");
   }
 }
