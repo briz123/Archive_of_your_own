@@ -1,3 +1,9 @@
+"""
+So this is the module that builds the library export workbook. It is a bit long, but it is mostly just styling and formatting. 
+The main function is build_library_workbook, which takes a list of works and returns a bytes object representing the workbook. 
+Theme, for now, is more of a modern, clean look compared to the rest of the app.
+The workbook has three sheets for now: Read Me, All Works, and Tags. 
+"""
 from datetime import datetime, timezone
 from enum import Enum
 from io import BytesIO
@@ -10,8 +16,9 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 from app.models import TagType, Work
 
+# I will later remove some of these as they are probably not needed, but for now 
+# display everything so we can troubleshoot when needed.
 WORK_COLUMNS = [
-    ("Work ID", 12),
     ("Fandom group", 28),
     ("Group size", 12),
     ("Work title", 36),
@@ -25,11 +32,7 @@ WORK_COLUMNS = [
     ("Archive warnings", 40),
     ("Category", 18),
     ("Language", 16),
-    ("Publisher", 24),
-    ("Identifier", 28),
     ("Subject", 36),
-    ("Creator", 24),
-    ("Producer", 24),
     ("Publication date", 18),
     ("Creation date", 18),
     ("Modification date", 18),
@@ -44,7 +47,6 @@ WORK_COLUMNS = [
     ("File sizes (bytes)", 20),
 ]
 TAG_COLUMNS = [
-    ("Work ID", 12),
     ("Work title", 40),
     ("Tag name", 44),
     ("Tag type", 20),
@@ -55,6 +57,8 @@ TAG_TYPE_ORDER = {
     TagType.RELATIONSHIP: 2,
     TagType.ADDITIONAL: 3,
 }
+
+# Palette 
 BLACK_CHERRY = "FF4B1022"
 WINE = "FF78233A"
 WINE_RED = "FF96384C"
@@ -85,7 +89,7 @@ def _value(value):
 def _work_tags(work: Work):
     return [tag for tag in work.tags if tag.user_id == work.user_id]
 
-
+# Trying to group by Fandom
 def _fandoms(work: Work):
     return sorted(
         (tag for tag in _work_tags(work) if tag.tag_type == TagType.FANDOM),
@@ -103,7 +107,11 @@ def _group_works(works: Iterable[Work]):
         elif len(fandoms) == 1:
             group_type, group_name = "fandom", fandoms[0].name
         else:
+            """ No fandom tags come last but this should be rare since works always have something under that tag.
+                Other scenarios are rare but possible, such as an extraction error.
+            """
             group_type, group_name = "uncategorized", "Uncategorized"
+        
         key = (group_type, group_name)
         groups.setdefault(key, []).append(work)
 
@@ -157,7 +165,12 @@ def _style_data_row(worksheet: Worksheet, row_number: int, banded: bool) -> None
         cell.fill = fill
         cell.font = Font(name="Calibri", size=10, color=BLACK_CHERRY)
         cell.alignment = Alignment(vertical="top", wrap_text=True)
-    title_cell = worksheet.cell(row_number, 4)
+    title_column = next(
+        index
+        for index, cell in enumerate(worksheet[1], start=1)
+        if cell.value == "Work title"
+    )
+    title_cell = worksheet.cell(row_number, title_column)
     title_cell.font = Font(
         name="Georgia",
         size=11,
@@ -182,11 +195,11 @@ def _style_group_heading(
         accent = FANDOM_ACCENTS[fandom_index % len(FANDOM_ACCENTS)]
         text_color = BLACK_CHERRY
 
-    for cell in worksheet[row_number][1:3]:
+    for cell in worksheet[row_number][:2]:
         cell.fill = PatternFill("solid", fgColor=accent)
         cell.font = Font(name="Calibri", bold=True, color=text_color)
         cell.alignment = Alignment(vertical="center")
-    worksheet.cell(row_number, 2).border = Border(
+    worksheet.cell(row_number, 1).border = Border(
         left=Side(
             style="medium",
             color=BLACK_CHERRY if group_type == "crossover" else accent,
@@ -207,7 +220,6 @@ def _configure_data_sheet(
 def _work_values(work: Work, group_name: str, group_size: Optional[int]) -> list:
     files = work.files
     return [
-        work.id,
         group_name,
         group_size,
         work.title,
@@ -221,11 +233,7 @@ def _work_values(work: Work, group_name: str, group_size: Optional[int]) -> list
         "; ".join(sorted((_value(warning.name) for warning in work.warnings), key=str.casefold)),
         _value(work.category),
         work.language,
-        work.publisher,
-        work.identifier,
         work.subject,
-        work.creator,
-        work.producer,
         work.publication_date,
         work.creation_date,
         work.modification_date,
@@ -288,40 +296,36 @@ def _add_tags_sheet(workbook: Workbook, works: list[Work]) -> None:
 
     tag_rows = [
         (
-            work.id,
             work.title,
             tag.name,
             tag.tag_type.value,
             TAG_TYPE_ORDER[tag.tag_type],
+            work.id,
         )
         for work in works
         for tag in _work_tags(work)
     ]
     tag_rows.sort(
         key=lambda row: (
+            row[0].casefold(),
+            row[3],
             row[1].casefold(),
             row[4],
-            row[2].casefold(),
-            row[0],
         )
     )
     for index, tag_row in enumerate(tag_rows):
-        worksheet.append(tag_row[:4])
+        worksheet.append(tag_row[:3])
         row_number = worksheet.max_row
         _style_data_row(worksheet, row_number, index % 2 == 1)
-        worksheet.cell(row_number, 2).font = Font(
-            name="Georgia",
-            size=10,
-            bold=True,
-            color=BLACK_CHERRY,
-        )
-        type_cell = worksheet.cell(row_number, 4)
+        type_cell = worksheet.cell(row_number, 3)
         type_cell.fill = PatternFill(
             "solid",
-            fgColor=TAG_TYPE_FILLS[TagType(tag_row[3])],
+            fgColor=TAG_TYPE_FILLS[TagType(tag_row[2])],
         )
         type_cell.font = Font(name="Calibri", size=10, bold=True, color=BLACK_CHERRY)
-    worksheet.auto_filter.ref = f"A1:D{worksheet.max_row}"
+    worksheet.auto_filter.ref = (
+        f"A1:{get_column_letter(len(TAG_COLUMNS))}{worksheet.max_row}"
+    )
 
 
 def _add_read_me_sheet(
@@ -467,7 +471,6 @@ def _add_read_me_sheet(
     worksheet.row_dimensions[16].height = 32
 
     work_definitions = [
-        ("Work ID", "AYO's ID for the work."),
         ("Fandom group", "Section grouping based on the number of fandom tag relationships."),
         ("Group size", "Number of works in this group, shown on its first work row."),
         ("Work title", "The saved work title."),
@@ -481,11 +484,7 @@ def _add_read_me_sheet(
         ("Archive warnings", "All saved archive warning names."),
         ("Category", "Saved work category."),
         ("Language", "Saved language."),
-        ("Publisher", "Saved publisher."),
-        ("Identifier", "Saved identifier."),
         ("Subject", "Saved subject."),
-        ("Creator", "Saved creator."),
-        ("Producer", "Saved producer."),
         ("Publication date", "Original publication date metadata."),
         ("Creation date", "Original creation date metadata."),
         ("Modification date", "Original modification date metadata."),
@@ -500,7 +499,6 @@ def _add_read_me_sheet(
         ("File sizes (bytes)", "Sizes recorded for associated local-file records."),
     ]
     tag_definitions = [
-        ("Work ID", "AYO's ID for the work associated with this tag."),
         ("Work title", "Saved work title."),
         ("Tag name", "One individual saved tag name."),
         ("Tag type", "Tag category: fandom, character, relationship, or additional."),

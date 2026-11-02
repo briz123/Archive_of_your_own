@@ -88,8 +88,8 @@ def test_empty_library_has_exactly_three_filterable_data_sheets() -> None:
     assert workbook.sheetnames == ["Read Me", "All Works", "Tags"]
     assert workbook["All Works"].max_row == 1
     assert workbook["Tags"].max_row == 1
-    assert workbook["All Works"].auto_filter.ref == "A1:AE1"
-    assert workbook["Tags"].auto_filter.ref == "A1:D1"
+    assert workbook["All Works"].auto_filter.ref == "A1:Z1"
+    assert workbook["Tags"].auto_filter.ref == "A1:C1"
     assert workbook["All Works"].freeze_panes == "A2"
     assert workbook["Tags"].freeze_panes == "A2"
     assert workbook.active.title == "Read Me"
@@ -106,8 +106,8 @@ def test_empty_library_has_exactly_three_filterable_data_sheets() -> None:
     assert workbook["Read Me"]["D8"].value == 0
     assert workbook["Read Me"]["F8"].value == 0
     assert "October 31, 2026" in workbook["Read Me"]["B5"].value
-    assert workbook["Read Me"]["B20"].value == "Work ID"
-    assert workbook["Read Me"]["B54"].value == "Work ID"
+    assert workbook["Read Me"]["B20"].value == "Fandom group"
+    assert workbook["Read Me"]["B54"].value == "Work title"
 
 
 def test_groups_works_once_by_actual_fandom_tag_relationships() -> None:
@@ -129,19 +129,17 @@ def test_groups_works_once_by_actual_fandom_tag_relationships() -> None:
         make_work(5, "Another Crossover", ("Zeta", "Alpha")),
     ]
     sheet = load_export(works)["All Works"]
-    work_ids = []
     titles_by_group = {}
     group_counts = {}
     group_order = []
 
     for row in sheet.iter_rows(min_row=2, values_only=True):
-        work_ids.append(row[0])
-        group_name = row[1]
+        group_name = row[0]
         if group_name not in titles_by_group:
             group_order.append(group_name)
             titles_by_group[group_name] = []
-            group_counts[group_name] = row[2]
-        titles_by_group[group_name].append(row[3])
+            group_counts[group_name] = row[1]
+        titles_by_group[group_name].append(row[2])
 
     assert sheet.max_row == len(works) + 1
     assert group_order == [
@@ -154,11 +152,10 @@ def test_groups_works_once_by_actual_fandom_tag_relationships() -> None:
     assert titles_by_group["Alpha"] == ["Alpha"]
     assert titles_by_group["Zeta"] == ["Zebra"]
     assert titles_by_group["Crossover"] == ["Another Crossover", "Éclair"]
-    assert sorted(work_ids) == [1, 2, 3, 4, 5]
-    assert sheet["B2"].fill.fgColor.rgb == "FFF4E9E6"
-    assert sheet["C2"].value == 1
-    assert sheet["B4"].fill.fgColor.rgb == "FF4B1022"
-    assert sheet["B6"].fill.fgColor.rgb == "FFEADCE3"
+    assert sheet["A2"].fill.fgColor.rgb == "FFF4E9E6"
+    assert sheet["B2"].value == 1
+    assert sheet["A4"].fill.fgColor.rgb == "FF4B1022"
+    assert sheet["A6"].fill.fgColor.rgb == "FFEADCE3"
 
 
 def test_exports_metadata_tags_unicode_and_styles_without_book_contents() -> None:
@@ -185,13 +182,34 @@ def test_exports_metadata_tags_unicode_and_styles_without_book_contents() -> Non
     workbook = load_export([work])
     all_works = workbook["All Works"]
     tags = workbook["Tags"]
+    headers = [cell.value for cell in all_works[1]]
     work_row = next(
-        row for row in all_works.iter_rows(min_row=2) if row[0].value == work.id
+        row
+        for row in all_works.iter_rows(min_row=2)
+        if row[headers.index("Work title")].value == long_title
     )
     tag_rows = list(tags.iter_rows(min_row=2, values_only=True))
-    headers = [cell.value for cell in all_works[1]]
 
     assert workbook.sheetnames == ["Read Me", "All Works", "Tags"]
+    assert not {
+        "Work ID",
+        "Publisher",
+        "Identifier",
+        "Creator",
+        "Producer",
+    }.intersection(headers)
+    omitted_fields = {"Work ID", "Publisher", "Identifier", "Creator", "Producer"}
+    read_me_labels = {
+        cell.value
+        for row in workbook["Read Me"].iter_rows()
+        for cell in row
+    }
+    assert omitted_fields.isdisjoint(read_me_labels)
+    assert [cell.value for cell in tags[1]] == [
+        "Work title",
+        "Tag name",
+        "Tag type",
+    ]
     assert all_works.cell(work_row[0].row, headers.index("Work title") + 1).value == long_title
     assert all_works.cell(work_row[0].row, headers.index("Summary") + 1).value == long_summary
     assert all_works.cell(work_row[0].row, headers.index("Summary") + 1).alignment.wrap_text
@@ -202,16 +220,16 @@ def test_exports_metadata_tags_unicode_and_styles_without_book_contents() -> Non
     assert all_works.cell(work_row[0].row, headers.index("Date added") + 1).number_format == (
         "yyyy-mm-dd hh:mm"
     )
-    assert all_works.column_dimensions["F"].width == 60
+    assert all_works.column_dimensions["E"].width == 60
     assert all_works.auto_filter.ref.endswith(f"{all_works.max_row}")
-    assert [row[2:] for row in tag_rows] == [
+    assert [row[1:] for row in tag_rows] == [
         ("Fandom 1", "fandom"),
         ("Fandom 2", "fandom"),
         ("Zoë", "character"),
         ("Friends & Lovers", "relationship"),
         ("絆", "additional"),
     ]
-    assert [tags.cell(row, 4).fill.fgColor.rgb for row in range(2, 7)] == [
+    assert [tags.cell(row, 3).fill.fgColor.rgb for row in range(2, 7)] == [
         "FFF4E9E6",
         "FFF4E9E6",
         "FFEADCE3",

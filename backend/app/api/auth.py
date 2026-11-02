@@ -10,7 +10,6 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, mo
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
-
 from app.config import (
     CSRF_COOKIE_NAME,
     SESSION_COOKIE_NAME,
@@ -26,7 +25,7 @@ router = APIRouter(prefix="/api/auth", tags=["authentication"])
 password_hasher = PasswordHasher()
 _dummy_password_hash = password_hasher.hash(secrets.token_urlsafe(32))
 
-
+# For now require long password, I want to make sure people choose something that cannot be guessed so easily
 class RegistrationRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=12, max_length=128)

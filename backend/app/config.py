@@ -4,9 +4,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Advanced search is true by default but can be changed in the .env
 ADVANCED_SEARCH_ENABLED = os.getenv(
     "ENABLE_ADVANCED_SEARCH", "true"
 ).strip().lower() in {"1", "true", "yes", "on"}
+
 SESSION_COOKIE_SECURE = os.getenv(
     "SESSION_COOKIE_SECURE", "true"
 ).strip().lower() in {"1", "true", "yes", "on"}
@@ -18,6 +20,7 @@ if SESSION_COOKIE_SAMESITE == "none" and not SESSION_COOKIE_SECURE:
 SESSION_COOKIE_NAME = "ayo_session"
 CSRF_COOKIE_NAME = "ayo_csrf"
 SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 14
+
 TRUSTED_FRONTEND_ORIGINS = {
     origin.strip().rstrip("/")
     for origin in os.getenv(
