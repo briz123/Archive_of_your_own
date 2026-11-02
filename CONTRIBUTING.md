@@ -2,7 +2,9 @@
 
 Thank you for your interest in contributing to AYO!
 
-AYO (Archive of Your Own) is currently a work in progress. The project is not live yet and does not currently have a production hosting service or deployed database.
+AYO (Archive of Your Own) is currently a work in progress.
+
+ <!-- The project is not live yet and does not currently have a production hosting service or deployed database. -->
 
 Contributions, suggestions, bug reports, and improvements are welcome.
 
@@ -76,13 +78,14 @@ Pull requests will be reviewed before any changes are merged into the main proje
 
 ## Current Project Status
 
-AYO is actively being developed and is not yet publicly deployed.
+AYO is actively being developed.
+ <!-- and is not yet publicly deployed.
 
 No production hosting service is currently configured.
 
 No production database is currently deployed.
 
-Development and testing are currently performed locally.
+Development and testing are currently performed locally. -->
 
 Features and architecture may change as the project develops.
 
